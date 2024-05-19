@@ -1,0 +1,5 @@
+Please analyze whether the provided code fully meets the requirements of the query and make judgement.
+The analysis will consider: 1) Whether the code directly resolves the issue raised in the query; 2) The completeness of its functionality in addressing the query's requirements; 3) Any redundancy or missing key steps.
+Response in json format:
+{"analysis": "A thorough analytical process outlining how well the code aligns with the query's demands and any deviations or shortcomings noticed.",
+"judgement": "A definitive judgment, with 'yes' indicating the code fully meets the query's requirements, and 'no' suggesting discrepancies or unmet needs."}

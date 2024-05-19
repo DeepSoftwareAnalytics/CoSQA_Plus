@@ -1,0 +1,27 @@
+Task Instruction:
+Your goal is to analyze a snippet of Python code and output in JSON format a judgement of whether it is self-contained, according to the following definitions:
+- Self-contained: The code does not reference any global variables, classes, instance methods, and functions beyond its own defined scope, but it is allowed to freely use the functionality of the Python standard library and popular third-party libraries.
+- Non-self-contained: The code includes references to globally defined variables, classes, instance methods, functions outside the code snippet, or uses obscure third-party libraries.
+The output should follow the below JSON format：
+{
+  "analysis": [  // Array of reasoning
+    // For self-contained cases
+    "No external dependencies detected.",
+    // For non-self-contained cases 
+    "References external variable: <varName>.",
+    "Calls external class: <className>.",
+    "Calls external instance method: <className>.<methodName>.",
+    "Calls undefined function: <funcName>.",
+    "Implies usage of uncommon third-party library: <libName>."
+  ],
+ "isSelfContained": true/false,
+}
+
+Code snippet: 
+<code>
+
+Analysis Guide:
+- Global Variables and External Definitions Check: Review the code for references to global variables not defined in the current snippet, including class properties referenced via self, unless these properties are clearly defined as internal properties in the context of the analysis.
+- Class and Method Reference Check: Identify whether the code calls externally defined classes, instance methods, or functions, paying particular attention to calls via self, which usually indicate dependencies on external parts (other parts of the class).
+- Library Usage Inference: Analyze the code logic to infer whether it uses standard library or possible third-party library features. Distinguish between typical use of the standard library and special patterns or advanced features that might imply the use of obscure libraries.
+- Nature of the Third-Party Library Judgement: If it is inferred that a third-party library is used, evaluate whether it belongs to popular libraries (such as numpy, requests, etc.), or obscure, uncommon libraries.
