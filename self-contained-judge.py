@@ -19,7 +19,7 @@ def judge_match():
     为了提高速度，这里采用了多线程并发处理
     """
     logging.info("start the judge!")
-    input_file = "dataset\cosqa\cosqa-all.json"
+    input_file = "../experiment3/data/qa/cosqa-all.json"
     output_file = "cosqa_all_llama3_70b_instruct_self_contained_5_judge.csv"
     temp_file = "temp_output.csv"
     # 读取之前保存的 csv 文件
@@ -35,7 +35,7 @@ def judge_match():
     with open(input_file, "r") as file:
         json_data = json.load(file)
         l = len(json_data)
-    max_concurrent_tasks = 2 # 最大并发任务数
+    max_concurrent_tasks = 4 # 最大并发任务数
     now_index = 0
     # 最大线程数设为50
     with concurrent.futures.thread.ThreadPoolExecutor(max_workers=100) as executor:
@@ -66,7 +66,7 @@ def judge_match():
                 # 将当前数据条目的 DataFrame 添加到整体 DataFrame
                 df = pd.concat([df, df_current])
                 # 保存当前 DataFrame 到表格
-                if now_index1%50==0:
+                if now_index1%5==0:
                     df.to_csv(temp_file)
                     os.replace(temp_file, output_file)
                     logging.info("save the %s th query-pair judgement", now_index1)
@@ -79,7 +79,7 @@ def judge_match():
 
 
 def get_prompt(text):
-    with open("prompt\self-contained-5.txt","r") as f:
+    with open("prompt/self-contained-5.txt","r") as f:
         prompt=f.read()
     return prompt.replace('<code>',text)
 
@@ -106,10 +106,10 @@ def judge_task(data, index):
 
 if __name__ == '__main__':
     # set log
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s -   %(message)s',
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                         datefmt='%m/%d/%Y %H:%M:%S', level=logging.INFO)
     # 保存日志到文件
-    logging.getLogger().addHandler(logging.FileHandler("log/cosqa_all_llama3_70b_instruct_self_contained_5_judge.log"))
+    # logging.getLogger().addHandler(logging.FileHandler("log/cosqa_all_llama3_70b_instruct_self_contained_5_judge.log"))
     judge_match()
     mydata={
         'text':'通知',
