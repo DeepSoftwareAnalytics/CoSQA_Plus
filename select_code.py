@@ -1,5 +1,4 @@
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1,2"
 os.environ["TOKENIZERS_PARALLELISM"]="true"
 import argparse
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
@@ -8,7 +7,8 @@ import json
 import logging
 import numpy as np
 from transformers import AutoTokenizer, AutoModel
-from model import Model
+from transformers import RobertaConfig,RobertaTokenizer
+from model import UniXcoderModel,CodeBertModel
 import random
 from sklearn.mixture import GaussianMixture
 import pandas as pd
@@ -39,33 +39,53 @@ class CodeInputFeatures(object):
         self.code_ids = code_ids
 
 
-def convert_query_examples_to_features(js, tokenizer, args):
+def convert_query_examples_to_features(js, tokenizer, args, model_name):
     """convert examples to token ids"""
     nl = (" ".join(js["doc"].split()))
-    nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
-    nl_tokens = (
-        [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
-        + nl_tokens
-        + [tokenizer.sep_token]
-    )
-    nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
-    padding_length = args.nl_length - len(nl_ids)
-    nl_ids += [tokenizer.pad_token_id] * padding_length
+    if model_name == "unixcoder-base":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
+        nl_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + nl_tokens
+            + [tokenizer.sep_token]
+        )
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codebert-base":
+        nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-2]
+        nl_tokens = [tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codet5p-110m-embedding":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length]
+        nl_ids = tokenizer.encode(nl)[: args.nl_length]
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
     return QueryInputFeatures(js["idx"], nl_tokens, nl_ids)
 
 
-def convert_code_examples_to_features(js, tokenizer, args):
+def convert_code_examples_to_features(js, tokenizer, args, model_name):
     """convert examples to token ids"""
     code = (" ".join(js["code"].split()))
-    code_tokens = tokenizer.tokenize(code)[: args.code_length - 4]
-    code_tokens = (
-        [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
-        + code_tokens
-        + [tokenizer.sep_token]
-    )
-    code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    if model_name == "unixcoder-base":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length - 4]
+        code_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + code_tokens
+            + [tokenizer.sep_token]
+        )
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codebert-base":
+        code_tokens = tokenizer.tokenize(code)[:args.code_length-2]
+        code_tokens = [tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codet5p-110m-embedding":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length]
+        code_ids = tokenizer.encode(code)[: args.code_length]
     padding_length = args.code_length - len(code_ids)
-    code_ids += [tokenizer.pad_token_id] * padding_length
+    code_ids += [tokenizer.pad_token_id]*padding_length
     return CodeInputFeatures(js["idx"], code_tokens, code_ids)
 
 
@@ -79,7 +99,7 @@ def set_seed(seed=42):
 
 
 class QueryDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None):
+    def __init__(self, tokenizer, args, file_path=None,model_name='unixcoder-base'):
         self.examples = []
         data = []
         # 读取文件
@@ -90,7 +110,7 @@ class QueryDataset(Dataset):
         # 处理数据
         for js in tqdm(data,desc="Processing/loading query"):
             self.examples.append(
-                convert_query_examples_to_features(js, tokenizer, args)
+                convert_query_examples_to_features(js, tokenizer, args,model_name)
             )
         # 输出示例
         for idx, example in enumerate(self.examples[:1]):
@@ -111,7 +131,7 @@ class QueryDataset(Dataset):
 
 
 class CodeDataset(Dataset):
-    def __init__(self, tokenizer, args, file_path=None, batch_size=5000):
+    def __init__(self, tokenizer, args, file_path=None, batch_size=5000, model_name='unixcoder-base'):
         self.examples = []
         data = []
         # 读取文件
@@ -121,7 +141,7 @@ class CodeDataset(Dataset):
                     data.append(js)
         # 批量处理和并行化
         batched_data = [data[i:i+batch_size] for i in range(0, len(data), batch_size)]
-        processed_batches = Parallel(n_jobs=-1)(delayed(self._process_batch)(batch, tokenizer, args) for batch in tqdm(batched_data, desc="Parallel processing/loading code"))
+        processed_batches = Parallel(n_jobs=-1)(delayed(self._process_batch)(batch, tokenizer, args, model_name) for batch in tqdm(batched_data, desc="Parallel processing/loading code"))
         self.examples = [example for batch in processed_batches for example in batch]
         # # 处理数据
         # for js in tqdm(data,desc="Processing/loading code"):
@@ -132,8 +152,8 @@ class CodeDataset(Dataset):
             logger.info("idx: {}".format(idx))
             logger.info("code_tokens: {}".format([x.replace("\u0120", "_") for x in example.code_tokens]))
 
-    def _process_batch(self, batch, tokenizer, args):
-        return [convert_code_examples_to_features(js, tokenizer, args) for js in batch]
+    def _process_batch(self, batch, tokenizer, args, model_name):
+        return [convert_code_examples_to_features(js, tokenizer, args, model_name) for js in batch]
     def __len__(self):
         return len(self.examples)
 
@@ -142,10 +162,10 @@ class CodeDataset(Dataset):
 
 
 
-def get_similarity(args, model, tokenizer):
+def get_embedding(args, model, tokenizer,model_name,code_dataset_name):
     query_file = args.query_file
     code_file = args.code_file
-    query_dataset = QueryDataset(tokenizer, args, query_file)
+    query_dataset = QueryDataset(tokenizer, args, query_file,model_name)
     query_sampler = SequentialSampler(query_dataset)
     query_dataloader = DataLoader(
         query_dataset,
@@ -153,7 +173,7 @@ def get_similarity(args, model, tokenizer):
         batch_size=args.eval_batch_size,
         num_workers=4,
     )
-    code_dataset = CodeDataset(tokenizer, args, code_file)
+    code_dataset = CodeDataset(tokenizer, args, code_file,5000,model_name)
     code_sampler = SequentialSampler(code_dataset)
     code_dataloader = DataLoader(
         code_dataset,
@@ -166,33 +186,41 @@ def get_similarity(args, model, tokenizer):
     logger.info("  Batch size = %d", args.eval_batch_size)
     # obtain vector
     model.eval()
-    similarity = []
     nl_vecs = []
     code_vecs = []
-    for batch in tqdm(query_dataloader, desc="Processing queries"):  
-        nl_inputs = batch.to(args.device)
-        with torch.no_grad():
-            nl_vec = model(nl_inputs=nl_inputs)
-            nl_vecs.append(nl_vec.cpu().numpy()) 
+    for batch1 in tqdm(query_dataloader, desc="Processing queries"):
+            nl_inputs = batch1.to(args.device)
+            with torch.no_grad():
+                if model_name == 'unixcoder-base' or 'codebert-base':
+                    nl_vec = model(nl_inputs)
+                elif model_name == 'codet5p-110m-embedding':
+                    nl_vec = model(nl_inputs)[0]
+                nl_vecs.append(nl_vec.cpu().numpy())
 
     for batch in tqdm(code_dataloader, desc="Processing code"):
         code_inputs = batch.to(args.device)    
         with torch.no_grad():
-            code_vec = model(code_inputs=code_inputs)
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                code_vec = model(code_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                code_vec = model(code_inputs)[0]
             code_vecs.append(code_vec.cpu().numpy())
-            
+
     code_vecs = np.concatenate(code_vecs,0)
     nl_vecs = np.concatenate(nl_vecs,0)
     # 把code_vecs用pickle保存
-    with open(, 'wb') as f:
+    with open(f"{model_name}_{code_dataset_name}_code_vecs.pkl", 'wb') as f:
         pickle.dump(code_vecs, f)
+    with open(f"{model_name}_nl_vecs.pkl", 'wb') as f:
+        pickle.dump(nl_vecs, f)
+    logger.info("Obtain and save vectors succeed!")
+    # 计算相似度
     scores = np.matmul(nl_vecs,code_vecs.T)
     
     logger.info("Obtain vectors and calculate similarity succeed!")
-    return scores
-    return similarity
-
-def plot_similarity_distributions_per_query(similarity_matrix, num_bins=20):
+    # return scores
+    
+def plot_similarity_distributions_per_query(similarity_matrix, model_name,num_bins=20):
     """
     为每个查询绘制一张相似度区间数量分布图。
 
@@ -222,7 +250,10 @@ def plot_similarity_distributions_per_query(similarity_matrix, num_bins=20):
         
         # 计算每个区间的值的数量
         counts, _ = np.histogram(sorted_similarity, bins=bins)
-        
+        # 输出最高数量区间对应的similarity值
+        max_count_index = np.argmax(counts)
+        max_count_similarity = bins[max_count_index]
+        logger.info(f"{model_name}:Max count similarity for query {i+1}: {max_count_similarity}")
         # 绘图设置
         plt.figure(figsize=(10, 6))
         plt.bar(bins[:-1], counts, width=(bins[1] - bins[0]), align='edge', edgecolor='black', 
@@ -230,14 +261,104 @@ def plot_similarity_distributions_per_query(similarity_matrix, num_bins=20):
         plt.xlabel('Similarity Value')
         plt.ylabel('Number of Occurrences')
         plt.title(f'Distribution of Sorted Similarity Intervals for Query {i+1} (using {num_bins} bins)')
-        plt.xticks(bins[:-1])
+        # 假设我们决定每5个bin显示一个标签
+        selected_ticks = bins[:-1][::10]  # 选择每隔5个bin的位置
+        plt.xticks(selected_ticks)
+        # plt.xticks(bins[:-1])
         plt.legend()
         plt.grid(axis='y', linestyle='--', linewidth=0.7, alpha=0.7)
         
         # 显示图形并保存到文件以避免立即关闭（可选）
-        # plt.savefig(f'similarity_distribution_query_{i+1}.png')
-        plt.show()
+        plt.savefig(f'similarity_graph/{model_name}_similarity_distribution_query_{i+1}.png')
+        # plt.show()
 
+def select_code(args):
+    # 读取每个模型对应的embedding结果
+        all_code_vecs = []
+        all_nl_vecs = []
+        logger.info("Obtain code and query vector...")
+        for model_name in args.model_name_or_path:
+            with open("embedding/"+model_name+"_CSN_StaQC_code_vecs.pkl", 'rb') as f:
+                all_code_vecs.append(pickle.load(f))
+            with open("embedding/"+model_name+"_nl_vecs.pkl", 'rb') as f:
+                all_nl_vecs.append(pickle.load(f))
+            logger.info(f"Successfully obtain code and query vector from {model_name}")
+        # all_code_vecs = np.array(all_code_vecs)
+        # all_nl_vecs = np.array(all_nl_vecs)
+        # query分批次获取相似度,选取top5的代码
+        logger.info("Open query and code file...")
+        with open(args.query_file,'r') as f:
+            query_data = json.load(f)
+        with open(args.code_file,'r') as f:
+            code_data = json.load(f)
+        query_num = len(query_data)
+        logger.info(f"Successfully load {query_num} queries and {len(code_data)} codes")
+        
+        df = pd.DataFrame(query_data)
+        df.set_index('idx', inplace=True)
+        # 定义新列名以便存储top5代码数据
+        new_columns = ['top1_code', 'top2_code', 'top3_code', 'top4_code', 'top5_code']
+        
+        # 初始化新列，稍后将填充实际数据
+        for col in new_columns:
+            df[col] = ''
+        batch_size =204 # query num = 20604= 204 * 101 = 1717* 12
+        # 遍历每个query
+        logger.info("Start to calculate similarity and select code...")
+        for i in tqdm(range(0, query_num, batch_size)):
+            all_similarity = []
+            total_similarity = None # 初始化总相似度矩阵，大小与一个模型的scores_normalized相同
+            # 遍历每个模型
+            for j in range(len(args.model_name_or_path)):
+                logger.info(f"Calculating similarity for model {args.model_name_or_path[j]}...")
+                code_vecs = all_code_vecs[j]
+                nl_vecs = all_nl_vecs[j][i:i+batch_size]
+                 # 当nl_vecs和code_vecs进行了L2归一化后，计算相似度时，直接计算内积即可
+                scores = np.matmul(nl_vecs,code_vecs.T)
+                # 对scores(cos similarity)进行最大绝对值归一化处理，以确保模型有相同的贡献权重
+                max_abs_scores = np.max(np.abs(scores), axis=1, keepdims=True)
+                scores_normalized = scores / max_abs_scores
+                if total_similarity is None:
+                    total_similarity = scores_normalized
+                else:
+                    total_similarity += scores_normalized
+                # all_similarity.append(scores_normalized)
+            # 对每个query，计算每个code的平均相似度
+            # all_similarity是一个三位的列表，all[i][j][k]代表第i个模型第j个query第k个code对应的相似度
+            # 故求平均axis=0
+            logger.info("Calculating mean similarity for current batch...")
+            # mean_similarity的计算很费时间，我想了很久，发现其实根本不用计算mean_similarity，直接用total_similarity便可
+            # alright，the quicksort cost time
+            # mean_similarity = np.mean(all_similarity, axis=0)
+            # mean_similarity = total_similarity / len(args.model_name_or_path)
+            top_n = 5
+            sorted_idx = np.argpartition(-total_similarity, top_n, axis=1)[:, :top_n]
+            # sorted_idx = np.argsort(total_similarity,axis=1, kind='quicksort', order=None)[:,::-1]
+            logger.info(f"Processing query {i} ~ {i+batch_size}")
+            for k in range(i,i+batch_size):
+                if k >= query_num:
+                    break
+                # 获取当前query的代码信息
+                query = query_data[k]
+                query_idx = query['idx']
+                # 挑选前5个相似度最高的代码
+                temp_sorted_idx = sorted_idx[k-i][:5]
+                df.at[query_idx, 'top_code_index'] = str(temp_sorted_idx)
+                for idx, rank in enumerate(range(1, 6)):  # 从1开始计数，对应top1到top5
+                    code_idx = temp_sorted_idx[idx]
+                    code_info =  code_data[code_idx] # 获取代码信息
+                    if code_info:  # 确保代码索引存在
+                        df.at[query_idx, f'top{rank}_code'] = str(code_info['code']).strip()
+        # 保存结果
+        # logger.info("Saving results to selected_code.csv...")
+        # df.to_csv('selected_code1.csv')
+        # df.to_excel('selected_code1.xlsx')
+        df.to_json('selected_code2.json',orient='records')
+        df.to_pickle('selected_code2.pickle')
+        logger.info("Task completed. Results saved.")
+        
+                        
+                    
 def main():
     parser = argparse.ArgumentParser()
 
@@ -269,7 +390,7 @@ def main():
     )
     parser.add_argument(
         "--code_length",
-        default=256,
+        default=512,
         type=int,
         help="Optional Code input sequence length after tokenization.",
     )
@@ -279,7 +400,7 @@ def main():
     parser.add_argument(
         "--seed", type=int, default=42, help="random seed for initialization"
     )
-
+    parser.add_argument("--task",type=str,default='calculate similarity',help='',)
     # print arguments
     args = parser.parse_args()
 
@@ -297,33 +418,38 @@ def main():
 
     # Set seed
     set_seed(args.seed)
-    with open(args.query_file, "r") as f:
-        data = json.load(f)
-    df = pd.DataFrame(data)
     all_similarity = []
-    for model_name in args.model_name_or_path:
-        logger.info("loading model %s", model_name)
-        # load model and tokenizer
-        tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModel.from_pretrained(model_name)
-        model = Model(model)
-        logger.info("Parameters %s", args)
-        model.to(args.device)
-        # calculate similarity
-        similarity = get_similarity(args,model,tokenizer)
-        all_similarity.append(similarity)
-        # 保存结果到csv文件
-        modelname = model_name.replace("\\", "/").split("/")[-1]
-        # df["similarity" + "_" + model_name] = similarity
-        # df["labels" + "_" + model_name] = labels
-        # output_file_name = args.data_file.replace(".json", ".csv")
-        # df.to_csv(output_file_name, index=False)
+    if args.task == 'get_embedding':
+        for model_name in args.model_name_or_path:
+            logger.info("loading model %s", model_name)
+            # load model and tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(model_name,trust_remote_code=True)
+            model = AutoModel.from_pretrained(model_name,trust_remote_code=True)
+            if model_name == 'unixcoder-base':
+                model = UniXcoderModel(model)
+            elif model_name == 'codebert-base':
+                model = CodeBertModel(model)
+            logger.info("Parameters %s", args)
+            model.to(args.device)
+            # calculate similarity
+            code_dataset_name = args.code_file.split("/")[-1].split(".")[0]
+            get_embedding(args,model,tokenizer,model_name,code_dataset_name)
+            # all_similarity.append(similarity)
+            # 保存结果到csv文件
+            # modelname = model_name.replace("\\", "/").split("/")[-1]
+            # df["similarity" + "_" + model_name] = similarity
+            # df["labels" + "_" + model_name] = labels
+            # output_file_name = args.data_file.replace(".json", ".csv")
+            # df.to_csv(output_file_name, index=False)
+    elif args.task == 'select_code':
+        select_code(args)
+        
+        
+        # plot_similarity_distributions_per_query(mean_similarity,'all',100)
+        # plot_similarity_distributions_per_query(scores,model_name, 100)
+        
     # df.to_csv(output_file_name, index=False)
-    # 对每个query，计算每个code的平均相似度
-    # all_similarity是一个三位的列表，all[i][j][k]代表第i个模型第j个query第k个code对应的相似度
-    # 故求平均axis=0
-    mean_similarity = np.mean(all_similarity, axis=0)
-    plot_similarity_distributions_per_query(mean_similarity, 100)
+        
 
 if __name__ == "__main__":
     main()
