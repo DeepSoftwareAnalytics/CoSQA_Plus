@@ -1,5 +1,6 @@
 import json
 import lucene
+import argparse
 import numpy as np
 from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, Field, TextField
@@ -17,7 +18,7 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
         data = json.load(f)
         
     # 找出给定query_idx的正确代码的code_idx
-    code_idxs = [item['code_idx'] for item in data if item['query_idx'] == query_idx]
+    code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
     print(code_idxs)
 
     # 在list里面找到code_idx的rank并求倒数
@@ -56,12 +57,13 @@ def main():
     parser = argparse.ArgumentParser()
     
     # pylucene没有训练过程，直接测试
+    
+    parser.add_argument("--codebase_file", default=None, type=str,
+                        help="An optional input test data file to codebase (a json file).")
     parser.add_argument("--true_pairs_file", default=None, type=str,
                         help="A file contains all true pairs(a json file).")
     parser.add_argument("--test_data_file", default=None, type=str,
                         help="An optional input test data file to test the MMRR(a josn file).")
-    parser.add_argument("--codebase_file", default=None, type=str,
-                        help="An optional input test data file to codebase (a json file).")
     
     args = parser.parse_args()
     
@@ -87,7 +89,7 @@ def main():
     for item in codebase:
         doc = Document()
         doc.add(TextField("code", item["code"], Field.Store.YES))
-        doc.add(TextField("code_idx", str(item["code_idx"]), Field.Store.YES))
+        doc.add(TextField("code-idx", str(item["code-idx"]), Field.Store.YES))
         writer.addDocument(doc)
 
     writer.close()
@@ -107,7 +109,7 @@ def main():
     sort_code_idxs = []
     # 计算每条查询与每条代码的相关性得分
     for query_item in queries:
-        query_idx = query_item["query_idx"]
+        query_idx = query_item["query-idx"]
         query_str = query_item["query"]
 
         # 解析查询
@@ -120,13 +122,13 @@ def main():
         scores = []
         for hit in hits:
             doc = searcher.doc(hit.doc)
-            code_idx = int(doc.get("code_idx"))
+            code_idx = int(doc.get("code-idx"))
             code_idxs.append(code_idx)
             score = hit.score
-            print(f"query_idx:{query_idx} code_idx:{code_idx} score:{hit.score}")
+            print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
             scores.append(score)
 
-        query_idxs.append(query_item["query_idx"])
+        query_idxs.append(query_item["query-idx"])
         # 对得分降序排列，并得到对应的code_idx的列表
         # 使用zip函数组合分数和索引
         combined = list(zip(scores, code_idxs))
