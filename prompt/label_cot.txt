@@ -1,0 +1,15 @@
+query: <query>
+code: <code>
+Task: Evaluate if the provided code completely answers the query.
+Instructions:
+1) Analyze the query to understand user's code search requirements for the code.
+2) Evaluate the code to determine if it fully meets the requirements of the query. Identify any deviations.
+3) Make a judgement on the correctness of the code according to the guidelines. Provide your response in the following JSON format:
+{
+  "analysis": "Provide a detailed analysis of the code, including any deviations from the query requirements.",
+  "judgement": "State 'yes' if the code is correct, 'no' if it does not."
+}
+Guidelines:
+1. If the code completely satisfies the query, even exceeding its demands, it is correct.
+2. If the code meets most but not all requirements of the query, it is incorrect.
+3. If the code only partially meets or entirely misses the query requirements, it is incorrect.

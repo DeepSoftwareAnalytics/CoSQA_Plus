@@ -1,4 +1,6 @@
 import os
+
+from sklearn.cluster import KMeans
 os.environ["TOKENIZERS_PARALLELISM"]="true"
 import argparse
 from torch.utils.data import DataLoader, Dataset, SequentialSampler
@@ -331,8 +333,8 @@ def select_code(args):
             # alright，the quicksort cost time
             # mean_similarity = np.mean(all_similarity, axis=0)
             # mean_similarity = total_similarity / len(args.model_name_or_path)
-            top_n = 5
-            sorted_idx = np.argpartition(-total_similarity, top_n, axis=1)[:, :top_n]
+            top_n = 30
+            sorted_idx = np.argpartition(-total_similarity, top_n, axis=1)[:, :30]
             # sorted_idx = np.argsort(total_similarity,axis=1, kind='quicksort', order=None)[:,::-1]
             logger.info(f"Processing query {i} ~ {i+batch_size}")
             for k in range(i,i+batch_size):
@@ -341,8 +343,26 @@ def select_code(args):
                 # 获取当前query的代码信息
                 query = query_data[k]
                 query_idx = query['idx']
-                # 挑选前5个相似度最高的代码
-                temp_sorted_idx = sorted_idx[k-i][:5]
+                # # 挑选前5个相似度最高的代码
+                # temp_sorted_idx = sorted_idx[k-i][:5]
+                # 选的代码的时候similarity从高到低一个一个选，只有不重复的代码才有机会被选到，选5个
+                temp_sorted_idx = []
+                temp_code_data = []
+                temp_code_embedding = []
+                for code_index in sorted_idx[k-i][:top_n]:
+                    if len(temp_sorted_idx) >=5:
+                        break
+                    if code_data[code_index]['code'].strip() not in temp_code_data:
+                        temp_code_data.append(code_data[code_index]['code'].strip())
+                        temp_sorted_idx.append(code_index)
+                        # temp_code_embedding.append(all_code_vecs[0][code_index]) # 这里all_code_vecs[j]代表选取第j个模型的向量来计算
+                # # 用k-means聚类
+                # kmeans = KMeans(n_clusters=5, random_state=0).fit(temp_code_embedding)
+                # # 选取每个类别里面similarity最高的
+                # select_code_index = []
+                # for cluster_idx in range(5):
+                #     select_code_index.append(temp_sorted_idx[np.argmax(kmeans.labels_==cluster_idx)])
+                # temp_sorted_idx = select_code_index
                 df.at[query_idx, 'top_code_index'] = str(temp_sorted_idx)
                 for idx, rank in enumerate(range(1, 6)):  # 从1开始计数，对应top1到top5
                     code_idx = temp_sorted_idx[idx]
@@ -353,9 +373,15 @@ def select_code(args):
         # logger.info("Saving results to selected_code.csv...")
         # df.to_csv('selected_code1.csv')
         # df.to_excel('selected_code1.xlsx')
-        df.to_json('selected_code2.json',orient='records')
-        df.to_pickle('selected_code2.pickle')
-        logger.info("Task completed. Results saved.")
+        if len(args.model_name_or_path) == 1:
+            model_name = args.model_name_or_path[0]
+            df.to_json(model_name+'_selected_code4.json',orient='records')
+            df.to_pickle(model_name+'_selected_code4.pickle')
+            logger.info("Task completed. Results saved.")
+        else:
+            df.to_json('selected_code4.json',orient='records')
+            df.to_pickle('selected_code4.pickle')
+            logger.info("Task completed. Results saved.")
         
                         
                     

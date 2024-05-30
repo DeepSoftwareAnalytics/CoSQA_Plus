@@ -6,7 +6,7 @@ import ollama
 
 logging.basicConfig(level=logging.INFO)
 apikey = ''
-with open('apikey.txt', 'r') as f:
+with open('CoSQA-plus/apikey.txt', 'r') as f:
     apikey = f.readline()
 
 
@@ -18,10 +18,10 @@ def askgpt(text):
     1. api key自动切换机制，通过最晚调用时间来对api key进行排序，优先使用最晚调用时间最早的api key
     2. model自动切换机制，发现openai对不同模型的限制是分开计算的
     """
-    models = ['gpt-3.5-turbo-1106']
+    models = ['gpt-4-turbo-2024-04-09']
     max_retries = 2  # 最大重试次数
-    retry_delay = 10  # 初始重试延迟（秒）
-    max_retry_delay = 60  # 最大重试延迟（秒）
+    retry_delay = 5  # 初始重试延迟（秒）
+    max_retry_delay = 100  # 最大重试延迟（秒）
 
     # 从优先级队列中获取最晚调用时间最早的 API 密钥
     
@@ -33,9 +33,11 @@ def askgpt(text):
         while retry_count < max_retries:
             try:
                 response = client.chat.completions.create(
+                temperature=0.35,
+                top_p=0.4,
                 model=model,
                 messages=[{"role": "user", "content": text}],
-                response_format= {"type":"json_object"},
+                # response_format= {"type":"json_object"},
                 timeout=max_retry_delay)
                 return response.choices[0].message.content,response.model
             except openai.APIConnectionError as e:
@@ -69,7 +71,7 @@ def askglm(text):
 
     # 从优先级队列中获取最晚调用时间最早的 API 密钥
     
-    client = OpenAI(api_key='468133792eca9bb1474e1195b3916135.ThAHsaYk9GJ2oLXt',base_url="https://open.bigmodel.cn/api/paas/v4/")
+    client = OpenAI(api_key='',base_url="https://open.bigmodel.cn/api/paas/v4/")
     models = ['glm-3-turbo']
     # 尝试所有模型
     for model in models:
@@ -99,7 +101,7 @@ def askglm(text):
     return None, None
 
 def ask_ollama(text):
-    model = "llama3:70b-instruct"
+    model = "mistral:latest"
     res = ollama.generate(
             model=model,
             prompt=text,
