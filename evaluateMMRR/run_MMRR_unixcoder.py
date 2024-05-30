@@ -298,18 +298,33 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
 
     return result
 
+# query.json和codebase在使用前需要转换
 def pre_process(args):
-    filepath = args.codebase_file_pre_process
-    with open(filepath,'r+') as f:
-        data = json.load(f)
-    for js in data:
-        js["query-idx"] = ""
-        js["query"] = ""
-        js["pair-idx"] = ""
-        js["label"] = ""
-    with open(args.codebase_file,'w') as f:
-        json.dump(data,f,indent=4)
-    print(f'transformed!')
+    if args.codebase_file_pre_process:
+        filepath = args.codebase_file_pre_process
+        with open(filepath,'r+') as f:
+            data = json.load(f)
+        for js in data:
+            js["query-idx"] = ""
+            js["query"] = ""
+            js["pair-idx"] = ""
+            js["label"] = ""
+        with open(args.codebase_file,'w') as f:
+            json.dump(data,f,indent=4)
+        print(f'transformed!')
+    
+    if args.query_pre_process:
+        filepath = args.query_pre_process
+        with open(filepath,'r+') as f:
+            data = json.load(f)
+        for js in data:
+            js["code-idx"] = ""
+            js["code"] = ""
+            js["pair-idx"] = ""
+            js["label"] = ""
+        with open(args.query_file,'w') as f:
+            json.dump(data,f,indent=4)
+        print(f'transformed!')  
                         
                         
 def main():
@@ -329,6 +344,11 @@ def main():
                         help="Original codebase file(a json file).")
     parser.add_argument("--codebase_file", default=None, type=str,
                         help="Processed codebase file(a json file).")  
+    # 添加新参数：处理前后的query
+    parser.add_argument("--query_pre_process", default=None, type=str,
+                       help="Original query file(a json file).")
+    parser.add_argument("--query_file", default=None, type=str,
+                       help="Processed query file(a json file).")
     # 添加新参数：所有正确的pairs
     parser.add_argument("--true_pairs_file", default=None, type=str,
                         help="A file contains all true pairs(a json file).")
