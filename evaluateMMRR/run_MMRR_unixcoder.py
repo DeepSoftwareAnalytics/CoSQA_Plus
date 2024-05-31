@@ -205,14 +205,15 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
 
     # 在list里面找到code-idx的rank并求倒数
     inverse_ranks = []
+    i=0
     for code_idx in code_idxs:
-        for code_idx in code_idxs:
-            try:
-                inverse_ranks.append(1/(sort_list.index(code_idx) + 1))
+        i+=1
+        try:
+            inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
 
-            #对于lucene,有可能在选出来的code-idx中是找不到某个正确答案的 
-            except ValueError:
-                inverse_ranks.append(0)
+        #对于lucene,有可能在选出来的code-idx中是找不到某个正确答案的 
+        except ValueError:
+            inverse_ranks.append(0)
  
         
     MrRR = sum(inverse_ranks) / len(inverse_ranks)
@@ -343,12 +344,13 @@ def main():
     parser.add_argument("--codebase_file_pre_process", default=None, type=str,
                         help="Original codebase file(a json file).")
     parser.add_argument("--codebase_file", default=None, type=str,
-                        help="Processed codebase file(a json file).")  
+                        help="Processed codebase file(a json file).") 
     # 添加新参数：处理前后的query
     parser.add_argument("--query_pre_process", default=None, type=str,
                        help="Original query file(a json file).")
     parser.add_argument("--query_file", default=None, type=str,
                        help="Processed query file(a json file).")
+    
     # 添加新参数：所有正确的pairs
     parser.add_argument("--true_pairs_file", default=None, type=str,
                         help="A file contains all true pairs(a json file).")
@@ -429,7 +431,7 @@ def main():
     results = {}
     if args.do_eval:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint-best-mmrr/model.bin'
+            checkpoint_prefix = 'checkpoint_best_mmrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model  
             model_to_load.load_state_dict(torch.load(output_dir))      
@@ -441,12 +443,12 @@ def main():
             
     if args.do_test:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint-best-mmrr/model.bin'
+            checkpoint_prefix = 'checkpoint_best_mmrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model  
             model_to_load.load_state_dict(torch.load(output_dir))      
         model.to(args.device)
-        result = evaluate(args, model, tokenizer,args.test_data_file)
+        result = evaluate(args, model, tokenizer,args.query_file)
         logger.info("***** Eval results *****")
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],3)))
@@ -454,5 +456,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
