@@ -20,18 +20,23 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
     print(code_idxs)
 
     # 在list里面找到code_idx的rank并求倒数
+    ranks = []
     inverse_ranks = []
     for code_idx in code_idxs:
-        i+=1
         try:
-            inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
-
+            ranks.append(sort_list.index(code_idx)+1)
         #对于lucene,有可能在选出来的code_idx中是找不到某个正确答案的 
         except ValueError:
+            ranks.append(0)
+    ranks = sorted(ranks)
+    i = 1
+    for rank in ranks:
+        if not rank==0:
+            inverse_ranks.append(1/(rank-(i-1)))
+        else:
             inverse_ranks.append(0)
-
-                
-        
+    print(f'ranks:{ranks}')    
+     
     MrRR = sum(inverse_ranks) / len(inverse_ranks)
     print(f'The {query_idx}th query MrRR is {MrRR}')
     return MrRR
