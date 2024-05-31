@@ -10,8 +10,6 @@ from org.apache.lucene.search import IndexSearcher
 from org.apache.lucene.queryparser.classic import QueryParser
 from java.nio.file import Paths
 
-########################
-# 最后测试的时候要根据数据集改
 
 def CalculateMrRR(sort_list,eval_file,query_idx):
     with open(eval_file,'r') as f:
@@ -46,7 +44,7 @@ def CalculateMMRR(sort_lists,eval_file,query_idxs):
         cnt += 1
         
     MMRR = sum / cnt 
-    print(f'eval_mmrr:{MMRR}')
+    print(f'eval_mmrr:{MMRR}-------------------')
     return MMRR 
 
 
@@ -62,7 +60,7 @@ def main():
     parser.add_argument("--true_pairs_file", default=None, type=str,
                         help="A file contains all true pairs(a json file).")
     parser.add_argument("--test_data_file", default=None, type=str,
-                        help="An optional input test data file to test the MMRR(a josn file).")
+                        help="An optional query input test data file to test the MMRR(a josn file).")
     
     args = parser.parse_args()
     
@@ -106,37 +104,43 @@ def main():
 
     query_idxs = []
     sort_code_idxs = []
+    error_idxs = []
     # 计算每条查询与每条代码的相关性得分
     for query_item in queries:
         query_idx = query_item["query-idx"]
         query_str = query_item["query"]
+        
+        try:
+            # 解析查询
+            query_parsed = query_parser.parse(query_str)
 
-        # 解析查询
-        query_parsed = query_parser.parse(query_str)
+            hits = searcher.search(query_parsed, len(codebase)).scoreDocs  # 返回所有结果
+            # 没有被选中的code不会出现在hits里面，分数会是零。
 
-        hits = searcher.search(query_parsed, len(codebase)).scoreDocs  # 返回所有结果
-        # 没有被选中的code不会出现在hits里面，分数会是零。
+            code_idxs = []
+            scores = []
+            for hit in hits:
+                doc = searcher.doc(hit.doc)
+                code_idx = int(doc.get("code-idx"))
+                code_idxs.append(code_idx)
+                score = hit.score
+                print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
+                scores.append(score)
 
-        code_idxs = []
-        scores = []
-        for hit in hits:
-            doc = searcher.doc(hit.doc)
-            code_idx = int(doc.get("code-idx"))
-            code_idxs.append(code_idx)
-            score = hit.score
-            print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
-            scores.append(score)
+            query_idxs.append(query_item["query-idx"])
+            # 对得分降序排列，并得到对应的code_idx的列表
+            # 使用zip函数组合分数和索引
+            combined = list(zip(scores, code_idxs))
+            sorted_combined = sorted(combined, key=lambda x: x[0], reverse=True) 
 
-        query_idxs.append(query_item["query-idx"])
-        # 对得分降序排列，并得到对应的code_idx的列表
-        # 使用zip函数组合分数和索引
-        combined = list(zip(scores, code_idxs))
-        sorted_combined = sorted(combined, key=lambda x: x[0], reverse=True) 
-
-        # 可能会选出重复的，所以需要去重
-        seen = set()
-        sorted_combined_unique = [(a,b) for a,b in sorted_combined if not (b in seen or seen.add(b))]
-        sort_code_idxs.append([idx for _, idx in sorted_combined_unique])    
+            # 可能会选出重复的，所以需要去重
+            seen = set()
+            sorted_combined_unique = [(a,b) for a,b in sorted_combined if not (b in seen or seen.add(b))]
+            sort_code_idxs.append([idx for _, idx in sorted_combined_unique])    
+        except BaseException:
+            error_idxs.append(query_idx)
+            continue
+            
 
 
 
@@ -144,10 +148,8 @@ def main():
     reader.close()
     directory.close()
 
-    for row in sort_code_idxs:
-        print(row)
-
     CalculateMMRR(sort_code_idxs,args.true_pairs_file,query_idxs)   
+    print(f'error_idxs:{error_idxs}---------------')
     
 if __name__ == "__main__":
     main()
