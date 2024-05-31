@@ -22,8 +22,9 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
     # 在list里面找到code_idx的rank并求倒数
     inverse_ranks = []
     for code_idx in code_idxs:
+        i+=1
         try:
-            inverse_ranks.append(1/(sort_list.index(code_idx) + 1))
+            inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
 
         #对于lucene,有可能在选出来的code_idx中是找不到某个正确答案的 
         except ValueError:
