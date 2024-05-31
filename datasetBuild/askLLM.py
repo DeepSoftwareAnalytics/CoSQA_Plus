@@ -3,12 +3,43 @@ from openai import OpenAI
 import logging
 import time
 import ollama
-
 logging.basicConfig(level=logging.INFO)
 apikey = ''
-with open('CoSQA-plus/apikey.txt', 'r') as f:
+with open('CoSQA-plus/datasetBuild/apikey.txt', 'r') as f:
     apikey = f.readline()
 
+def ask_text_embedding(text):
+    models = ['text-embedding-3-large']
+    max_retries = 2  # 最大重试次数
+    retry_delay = 5  # 初始重试延迟（秒）
+    max_retry_delay = 100  # 最大重试延迟（秒）
+
+    # 从优先级队列中获取最晚调用时间最早的 API 密钥
+    
+    client = OpenAI(api_key=apikey,base_url="https://api.xiaoai.plus/v1")
+
+    # 尝试所有模型
+    for model in models:
+        retry_count = 0
+        while retry_count < max_retries:
+            try:
+                response = client.embeddings.create(input=[text],model=model)
+                return response.data[0].embedding,response.model
+            except openai.APIConnectionError as e:
+                logging.info(f"An error occurred: {str(e)}")
+            except openai.RateLimitError as e:
+                logging.info(f"Rate limit exceeded: {str(e)}")
+            except openai.BadRequestError as e:
+                logging.info(f"Invalid request: {str(e)}")
+            except openai.AuthenticationError as e:
+                logging.info(f"Authentication error: {str(e)}")
+            except openai.OpenAIError as e:
+                logging.info(f"An error occurred: {str(e)}")
+            retry_count += 1
+            time.sleep(retry_delay)
+
+    logging.info("Failed to complete request after exponential backoff.")
+    return None, None
 
 def askgpt(text):
     """
