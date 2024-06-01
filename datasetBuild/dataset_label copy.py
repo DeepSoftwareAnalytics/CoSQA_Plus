@@ -20,9 +20,9 @@ def judge_match():
     """
     logging.info("start the judge!")
     input_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000.json"
-    output_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_gpt351106.csv"
+    output_file = "human_query_code_pairs_1000_llama3.csv"
     temp_file = "temp_output.csv"
-    pickle_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_gpt351106.pkl"
+    pickle_file = "human_query_code_pairs_1000_llama3.pkl"
     # 读取之前保存的 csv 文件
     try:
         df = pd.read_csv(output_file, index_col=0)
@@ -34,10 +34,10 @@ def judge_match():
     with open(input_file, "r") as file:
         json_data = json.load(file)
         l = len(json_data)
-    max_concurrent_tasks = 100 # 最大并发任务数
+    max_concurrent_tasks = 50 # 最大并发任务数
     now_index = 0
     # 最大线程数设为50
-    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=100) as executor:
+    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=50) as executor:
         futures = []
         while now_index < l:
             for i in range(max_concurrent_tasks-len(futures)):
@@ -112,7 +112,7 @@ def judge_task(data, index):
         "model": [model],
         "label":[data["label"]],
         "origin_answer":[answer_json]
-    },index=[index])
+    })
     return df_current, index
 
 

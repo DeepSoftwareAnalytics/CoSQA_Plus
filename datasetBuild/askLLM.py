@@ -49,7 +49,7 @@ def askgpt(text):
     1. api key自动切换机制，通过最晚调用时间来对api key进行排序，优先使用最晚调用时间最早的api key
     2. model自动切换机制，发现openai对不同模型的限制是分开计算的
     """
-    models = ['gpt-4-turbo-2024-04-09']
+    models = ['gpt-3.5-turbo-1106']
     max_retries = 2  # 最大重试次数
     retry_delay = 5  # 初始重试延迟（秒）
     max_retry_delay = 100  # 最大重试延迟（秒）
