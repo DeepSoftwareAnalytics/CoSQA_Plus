@@ -64,19 +64,49 @@ class InputFeatures(object):
 def convert_examples_to_features(js,tokenizer,args):
     
     """convert examples to token ids"""
-    code = ' '.join(js['code'].split())
-    code_tokens = tokenizer.tokenize(code)[:args.code_length-4]
-    code_tokens =[tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+code_tokens+[tokenizer.sep_token]
-    code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    model_name = args.model_name_or_path.split('/')[-1]
+    code = (" ".join(js["code"].split()))
+    if model_name == "unixcoder-base":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length - 4]
+        code_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + code_tokens
+            + [tokenizer.sep_token]
+        )
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codebert-base":
+        code_tokens = tokenizer.tokenize(code)[:args.code_length-2]
+        code_tokens = [tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codet5p-110m-embedding":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length]
+        code_ids = tokenizer.encode(code)[: args.code_length]
     padding_length = args.code_length - len(code_ids)
     code_ids += [tokenizer.pad_token_id]*padding_length
 
-    nl = ' '.join(js['query'].split())
-    nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-4]
-    nl_tokens = [tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+nl_tokens+[tokenizer.sep_token]
-    nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
-    padding_length = args.nl_length - len(nl_ids)
-    nl_ids += [tokenizer.pad_token_id]*padding_length   
+    nl = (" ".join(js["query"].split()))
+    if model_name == "unixcoder-base":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
+        nl_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + nl_tokens
+            + [tokenizer.sep_token]
+        )
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codebert-base":
+        nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-2]
+        nl_tokens = [tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codet5p-110m-embedding":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length]
+        nl_ids = tokenizer.encode(nl)[: args.nl_length]
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+        
     return InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['pair-idx'],js['query-idx'],js['code-idx'],js['label'])
     
 
@@ -277,7 +307,10 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
         for batch in tqdm(query_dataloader):  
             nl_inputs = batch[1].to(args.device)
             with torch.no_grad():
-                nl_vec = model(nl_inputs=nl_inputs) 
+                if model_name == 'unixcoder-base' or 'codebert-base':
+                    nl_vec = model(nl_inputs)
+                elif model_name == 'codet5p-110m-embedding':
+                    nl_vec = model(nl_inputs)[0]
                 nl_vecs.append(nl_vec.cpu().numpy()) 
         nl_vecs = np.concatenate(nl_vecs,0)
     if code_vecs is None:
@@ -285,10 +318,13 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
         for batch in tqdm(code_dataloader):
             code_inputs = batch[0].to(args.device)    
             with torch.no_grad():
-                code_vec = model(code_inputs=code_inputs)
-                code_vecs.append(code_vec.cpu().numpy())  
+                if model_name == 'unixcoder-base' or 'codebert-base':
+                    code_vec = model(code_inputs)
+                elif model_name == 'codet5p-110m-embedding':
+                    code_vec = model(code_inputs)[0]
+                code_vecs.append(code_vec.cpu().numpy())
         code_vecs = np.concatenate(code_vecs,0)
-    model.train()    
+    model.train()
         
     
     # pickle.dump(code_vecs,open(f'{model_name}_mmrr_code_vecs.pkl','wb'))
@@ -445,7 +481,7 @@ def main():
     
     model.to(args.device)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)  
+        model = torch.nn.DataParallel(model)
     
     # Process codebase
     pre_process(args)
