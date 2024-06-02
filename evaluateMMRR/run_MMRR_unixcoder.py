@@ -35,8 +35,6 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
 
 logger = logging.getLogger(__name__)
 
-###############################################################################
-# 目前没有改的：auto-label
 
 class InputFeatures(object):
     """A single training/test features for a example."""
@@ -54,7 +52,6 @@ class InputFeatures(object):
         self.code_ids = code_ids
         self.nl_tokens = nl_tokens
         self.nl_ids = nl_ids
-        ################# add:
         self.pair_idx = pair_idx
         self.query_idx = query_idx
         self.code_idx = code_idx
@@ -195,10 +192,8 @@ def train(args, model, tokenizer):
             logger.info("Saving model checkpoint to %s", output_dir)
 
 
-def CalculateMrRR(sort_list,eval_file,query_idx):
-    with open(eval_file,'r') as f:
-        data = json.load(f)
-        
+def CalculateMcRR(sort_list,data,query_idx):
+  
     # 找出给定query-idx的正确代码的code-idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
     # print(code_idxs)
@@ -211,17 +206,19 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
     inverse_ranks = []
     
     for code_idx in code_idxs:
-        ranks.append(sort_list.index(code_idx)+1)
-            # inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
-
-        # 对于lucene,有可能在选出来的code-idx中是找不到某个正确答案的 
-        # except ValueError:
-        #     inverse_ranks.append(0)
-    # 改了之后对于lucene的思路是不一样的，测lucene的时候要另外改
+        # 10000以后的置0
+        rank = sort_list.index(code_idx)+1
+        if rank <= 1000:
+            ranks.append(rank)
+        else:
+            ranks.append(0)
     ranks = sorted(ranks) #升序排序
     i=1
     for rank in ranks:
-        inverse_ranks.append(1/(rank-(i-1))) 
+        if not rank==0:
+            inverse_ranks.append(1/(rank-(i-1))) 
+        else:
+            inverse_ranks.append(0)
         i+=1
     print(f'ranks:{ranks}')
         
@@ -233,15 +230,53 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
     sum = 0
     cnt = 0
+    with open(eval_file,'r') as f:
+        data = json.load(f)
     for idx,item in zip(query_idxs, sort_lists):
-        sum += CalculateMrRR(item,eval_file,idx)
+        sum += CalculateMrRR(item,data,idx)
         cnt += 1
         
     MMRR = sum / cnt 
     print(f'eval_mmrr:{MMRR}')
     return MMRR 
 
-            
+# sort_lists是按relevance降序排列的code_idxs
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    with open(eval_file,'r') as f:
+        data = json.load(f)
+    ranks = []
+    inverse_ranks = []
+    for idx,item in zip(query_idxs, sort_lists):
+        # 找出给定query-idx的正确代码的code-idx的first one
+        code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
+        print(f'code_idxs:{code_idxs}')
+        rank_i = []
+        for code_idx in code_idxs:
+            try:
+                # 1000以后的置0
+                rank = item.index(code_idx)+1
+                if rank <= 1000:
+                    rank_i.append(rank)
+                else:
+                    rank_i.append(0) 
+            except ValueError:
+                rank_i.append(0)
+        print(f'rank_i:{rank_i}')       
+        # 只有0返回0，有0有正返回最小正整数
+        rank_x = [num for num in rank_i if num > 0]
+        rank_min = 0
+        if rank_x:
+            rank_min = min(rank_x)
+        ranks.append(rank_min)
+        print(f'ranks:{ranks}')
+    for rank in ranks:
+        if not rank == 0:
+            inverse_ranks.append(1/rank)
+        else:
+            inverse_ranks.append(0)
+    MRR = sum(inverse_ranks) / len(inverse_ranks)
+    print(f'eval_mrr:{MRR}')
+    return MRR
             
 def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     query_dataset = TextDataset(tokenizer, args, file_name)
