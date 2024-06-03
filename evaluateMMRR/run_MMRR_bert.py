@@ -1,23 +1,3 @@
-# coding=utf-8
-# Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""
-Fine-tuning the library models for language modeling on a text file (GPT, GPT-2, BERT, RoBERTa).
-GPT and GPT-2 are fine-tuned using a causal language modeling (CLM) loss while BERT and RoBERTa are fine-tuned
-using a masked language modeling (MLM) loss.
-"""
 import sys 
 import argparse
 import logging
@@ -31,10 +11,9 @@ from model import Model
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler,TensorDataset
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
-                              RobertaConfig, RobertaModel, RobertaTokenizer)
+                              BertModel, BertTokenizer, BertConfig, RobertaConfig, RobertaModel, RobertaTokenizer)
 
 logger = logging.getLogger(__name__)
-
 
 class InputFeatures(object):
     """A single training/test features for a example."""
@@ -137,7 +116,6 @@ def train(args, model, tokenizer):
     # model.resize_token_embeddings(len(tokenizer))
     model.zero_grad()
     
-    # InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['pair-idx'],js['query-idx'],js['code-idx'],js['label'])
 
     model.train()
     tr_num,tr_loss,best_mrr = 0,0,0 
@@ -192,8 +170,8 @@ def train(args, model, tokenizer):
             logger.info("Saving model checkpoint to %s", output_dir)
 
 
-def CalculateMcRR(sort_list,data,query_idx):
-  
+def CalculateMrRR(sort_list,data,query_idx):
+      
     # 找出给定query-idx的正确代码的code-idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
     # print(code_idxs)
@@ -206,19 +184,17 @@ def CalculateMcRR(sort_list,data,query_idx):
     inverse_ranks = []
     
     for code_idx in code_idxs:
-        # 10000以后的置0
-        rank = sort_list.index(code_idx)+1
-        if rank <= 1000:
-            ranks.append(rank)
-        else:
-            ranks.append(0)
+        ranks.append(sort_list.index(code_idx)+1)
+            # inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
+
+        # 对于lucene,有可能在选出来的code-idx中是找不到某个正确答案的 
+        # except ValueError:
+        #     inverse_ranks.append(0)
+    # 改了之后对于lucene的思路是不一样的，测lucene的时候要另外改
     ranks = sorted(ranks) #升序排序
     i=1
     for rank in ranks:
-        if not rank==0:
-            inverse_ranks.append(1/(rank-(i-1))) 
-        else:
-            inverse_ranks.append(0)
+        inverse_ranks.append(1/(rank-(i-1))) 
         i+=1
     print(f'ranks:{ranks}')
         
@@ -228,10 +204,10 @@ def CalculateMcRR(sort_list,data,query_idx):
 
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
-    sum = 0
-    cnt = 0
     with open(eval_file,'r') as f:
         data = json.load(f)
+    sum = 0
+    cnt = 0
     for idx,item in zip(query_idxs, sort_lists):
         sum += CalculateMrRR(item,data,idx)
         cnt += 1
@@ -240,43 +216,7 @@ def CalculateMMRR(sort_lists,eval_file,query_idxs):
     print(f'eval_mmrr:{MMRR}')
     return MMRR 
 
-# sort_lists是按relevance降序排列的code_idxs
-def CalculateMRR(sort_lists,eval_file,query_idxs):
-    with open(eval_file,'r') as f:
-        data = json.load(f)
-    ranks = []
-    inverse_ranks = []
-    for idx,item in zip(query_idxs, sort_lists):
-        # 找出给定query-idx的正确代码的code-idx的first one
-        code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
-        print(f'code_idxs:{code_idxs}')
-        rank_i = []
-        for code_idx in code_idxs:
-            try:
-                # 1000以后的置0
-                rank = item.index(code_idx)+1
-                if rank <= 1000:
-                    rank_i.append(rank)
-                else:
-                    rank_i.append(0) 
-            except ValueError:
-                rank_i.append(0)
-        print(f'rank_i:{rank_i}')       
-        # 只有0返回0，有0有正返回最小正整数
-        rank_x = [num for num in rank_i if num > 0]
-        rank_min = 0
-        if rank_x:
-            rank_min = min(rank_x)
-        ranks.append(rank_min)
-        print(f'ranks:{ranks}')
-    for rank in ranks:
-        if not rank == 0:
-            inverse_ranks.append(1/rank)
-        else:
-            inverse_ranks.append(0)
-    MRR = sum(inverse_ranks) / len(inverse_ranks)
-    print(f'eval_mrr:{MRR}')
-    return MRR
+            
             
 def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     query_dataset = TextDataset(tokenizer, args, file_name)
@@ -451,10 +391,15 @@ def main():
     set_seed(args.seed)
 
     #build model
-    tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path)
-    config = RobertaConfig.from_pretrained(args.model_name_or_path)
-    model = RobertaModel.from_pretrained(args.model_name_or_path) 
- 
+    if 'unixcoder' in args.model_name_or_path:
+        tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path)
+        config = RobertaConfig.from_pretrained(args.model_name_or_path)
+        model = RobertaModel.from_pretrained(args.model_name_or_path) 
+    
+    elif 'bert-base-uncased' in args.model_name_or_path:
+        tokenizer = BertTokenizer.from_pretrained(args.model_name_or_path) 
+        config = BertConfig.from_pretrained(args.model_name_or_path)
+        model = BertModel.from_pretrained(args.model_name_or_path)    
     
     model = Model(model)
     logger.info("Training/evaluation parameters %s", args)
@@ -500,6 +445,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
-
