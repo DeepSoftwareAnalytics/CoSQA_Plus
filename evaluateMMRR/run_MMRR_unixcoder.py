@@ -28,6 +28,7 @@ import torch
 import json
 import numpy as np
 from model import Model
+from tqdm import tqdm
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler,TensorDataset
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
@@ -199,7 +200,7 @@ def CalculateMcRR(sort_list,data,query_idx):
     # print(code_idxs)
     # 要给code_idxs升序排序（不然会出现分母为零的情况）
     code_idxs = sorted(code_idxs)
-    print(code_idxs)
+    # print(code_idxs)
     
     # 在list里面找到code-idx的rank并求倒数
     ranks = []
@@ -220,20 +221,21 @@ def CalculateMcRR(sort_list,data,query_idx):
         else:
             inverse_ranks.append(0)
         i+=1
-    print(f'ranks:{ranks}')
+    # print(f'ranks:{ranks}')
         
     MrRR = sum(inverse_ranks) / len(inverse_ranks)
-    print(f'The {query_idx}th query MrRR is {MrRR}')
+    # print(f'The {query_idx}th query MrRR is {MrRR}')
     return MrRR
 
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MMRR--------------')
     sum = 0
     cnt = 0
     with open(eval_file,'r') as f:
         data = json.load(f)
-    for idx,item in zip(query_idxs, sort_lists):
-        sum += CalculateMrRR(item,data,idx)
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
+        sum += CalculateMcRR(item,data,idx)
         cnt += 1
         
     MMRR = sum / cnt 
@@ -242,14 +244,15 @@ def CalculateMMRR(sort_lists,eval_file,query_idxs):
 
 # sort_lists是按relevance降序排列的code_idxs
 def CalculateMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MRR--------------')
     with open(eval_file,'r') as f:
         data = json.load(f)
     ranks = []
     inverse_ranks = []
-    for idx,item in zip(query_idxs, sort_lists):
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
         # 找出给定query-idx的正确代码的code-idx的first one
         code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
-        print(f'code_idxs:{code_idxs}')
+        # print(f'code_idxs:{code_idxs}')
         rank_i = []
         for code_idx in code_idxs:
             try:
@@ -261,14 +264,14 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
                     rank_i.append(0) 
             except ValueError:
                 rank_i.append(0)
-        print(f'rank_i:{rank_i}')       
+        # print(f'rank_i:{rank_i}')       
         # 只有0返回0，有0有正返回最小正整数
         rank_x = [num for num in rank_i if num > 0]
         rank_min = 0
         if rank_x:
             rank_min = min(rank_x)
         ranks.append(rank_min)
-        print(f'ranks:{ranks}')
+        # print(f'ranks:{ranks}')
     for rank in ranks:
         if not rank == 0:
             inverse_ranks.append(1/rank)
@@ -335,11 +338,14 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     # 计算mmrr    
     # 不应该用传进来的file_name,这里要用所有正确的pair来评测（因为不止一条对的，传进来的file_name可能只有一条对的）
     mmrr = CalculateMMRR(sort_idxs,args.true_pairs_file,query_idxs)
-        
+    # 计算mrr
+    mrr = CalculateMRR(sort_idxs,args.true_pairs_file,query_idxs)
 
     result = {
-        "eval_mmrr":float(mmrr)
+        "eval_mmrr":float(mmrr),
+        "eval_mrr":float(mrr)
     }
+    
 
     return result
 
@@ -482,6 +488,7 @@ def main():
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.eval_data_file)
         logger.info("***** Eval results *****")
+        print(result)
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],3)))
             
@@ -494,6 +501,7 @@ def main():
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.query_file)
         logger.info("***** Eval results *****")
+        print(result)
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],3)))
 
