@@ -19,10 +19,10 @@ def judge_match():
     为了提高速度，这里采用了多线程并发处理
     """
     logging.info("start the judge!")
-    input_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000.json"
-    output_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_gpt351106.csv"
+    input_file = "CoSQA-plus/dataset/stage_2_final/final_query_code_pairs.json"
+    output_file = "CoSQA-plus/dataset/stage_2_final/dataset_annotation_claude3sonnet.csv"
     temp_file = "temp_output.csv"
-    pickle_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_gpt351106.pkl"
+    pickle_file = "CoSQA-plus/dataset/human-label/dataset_annotation_claude3sonnet.pkl"
     # 读取之前保存的 csv 文件
     try:
         df = pd.read_csv(output_file, index_col=0)
@@ -34,10 +34,10 @@ def judge_match():
     with open(input_file, "r") as file:
         json_data = json.load(file)
         l = len(json_data)
-    max_concurrent_tasks = 100 # 最大并发任务数
+    max_concurrent_tasks = 500 # 最大并发任务数
     now_index = 0
     # 最大线程数设为50
-    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=100) as executor:
+    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=600) as executor:
         futures = []
         while now_index < l:
             for i in range(max_concurrent_tasks-len(futures)):
@@ -89,30 +89,30 @@ def judge_task(data, index):
     :param data: json文件中的每个数据
     :return: 处理好的表格数据df_current
     """
-    # idx_val = data["pair-index"]
     prompt = get_prompt(data['query'],data['code'])
     answer_json, model = askgpt(prompt)
     # answer_json, model = ask_ollama(prompt)
     if answer_json is None:
         return None,index
-    # df_current = pd.DataFrame({
-    #     "pair-index": [idx_val],
-    #     "query-index": [data["query-index"]],
-    #     "code-index": [data["code-index"]],
-    #     "code":[data["code"]],
-    #     "model": [model],
-    #     "origin_answer":[answer_json]
-    # }, index=[index])
     df_current = pd.DataFrame({
         "pair-index": [data["pair-idx"]],
         "query-index": [data["query-idx"]],
-        "query": [data["query"]],
+        # "query": [data["query"]],
         "code-index": [data["code-idx"]],
-        "code":[data["code"]],
+        # "code":[data["code"]],
         "model": [model],
-        "label":[data["label"]],
         "origin_answer":[answer_json]
-    },index=[index])
+    }, index=[index])
+    # df_current = pd.DataFrame({
+    #     "pair-index": [data["pair-idx"]],
+    #     "query-index": [data["query-idx"]],
+    #     "query": [data["query"]],
+    #     "code-index": [data["code-idx"]],
+    #     "code":[data["code"]],
+    #     "model": [model],
+    #     "label":[data["label"]],
+    #     "origin_answer":[answer_json]
+    # },index=[index])
     return df_current, index
 
 

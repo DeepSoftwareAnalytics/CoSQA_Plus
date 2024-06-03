@@ -23,7 +23,7 @@ def judge_match():
     input_file = "CoSQA-plus/dataset/augment_codebase.json"
     # output_file = "dataset_annotation_claude3_code_GPT4.csv"
     temp_file = "temp_output.pkl"
-    pickle_file = "code_embedding.pkl"
+    pickle_file = "CoSQA-plus/dataset/code_embedding.pkl"
     # 读取之前保存的 csv 文件
     try:
         # df = pd.read_csv(output_file, index_col=0)

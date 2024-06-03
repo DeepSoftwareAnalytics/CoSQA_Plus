@@ -273,6 +273,8 @@ def CalculateMMRR(sort_lists,eval_file,query_idxs):
     print(f'eval_mmrr:{MMRR}')
     return MMRR 
 
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    
             
             
 def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
@@ -336,7 +338,7 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     logger.info("sort done!")
     # sort_ids不是idx，只是code投射下来的排名
     sort_idxs = []
-    for sort_id in sort_ids:
+    for sort_id in tqdm(sort_ids):
         sort_idx = []
         for i in sort_id:
             sort_idx.append(code_dataset.examples[i].code_idx)
@@ -346,7 +348,7 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     
     # 要获取sort_ids对应的所有query-idxs
     query_idxs = []
-    for example in query_dataset.examples:
+    for example in tqdm(query_dataset.examples):
         query_idxs.append(example.query_idx)
         
     # 计算mmrr    
@@ -495,10 +497,10 @@ def main():
     results = {}
     if args.do_eval:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint_best_mmrr/model.bin'
+            checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model  
-            model_to_load.load_state_dict(torch.load(output_dir))      
+            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.eval_data_file)
         logger.info("***** Eval results *****")
@@ -507,10 +509,11 @@ def main():
             
     if args.do_test:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint_best_mmrr/model.bin'
+            checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
-            model_to_load = model.module if hasattr(model, 'module') else model  
-            model_to_load.load_state_dict(torch.load(output_dir))      
+            model_to_load = model.module if hasattr(model, 'module') else model 
+            # 目前不知道什么原因需要绝对路径才能识别
+            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.query_file)
         logger.info("***** Eval results *****")
