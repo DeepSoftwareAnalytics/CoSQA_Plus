@@ -35,7 +35,7 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                               RobertaConfig, RobertaModel, RobertaTokenizer)
 
 logger = logging.getLogger(__name__)
-
+CUDA_VISIBLE_DEVICES="3"
 
 class InputFeatures(object):
     """A single training/test features for a example."""
@@ -218,14 +218,13 @@ def CalculateMcRR(sort_list,data,query_idx):
     for rank in ranks:
         if not rank==0:
             inverse_ranks.append(1/(rank-(i-1))) 
+            i+=1
         else:
             inverse_ranks.append(0)
-        i+=1
     # print(f'ranks:{ranks}')
         
-    MrRR = sum(inverse_ranks) / len(inverse_ranks)
-    # print(f'The {query_idx}th query MrRR is {MrRR}')
-    return MrRR
+    McRR = sum(inverse_ranks) / len(inverse_ranks)
+    return McRR
 
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
