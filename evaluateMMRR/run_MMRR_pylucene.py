@@ -18,7 +18,7 @@ def CalculateMcRR(sort_list,eval_file,query_idx):
         
     # 找出给定query_idx的正确代码的code_idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
-    print(code_idxs)
+    # print(code_idxs)
 
     # 在list里面找到code_idx的rank并求倒数
     ranks = []
@@ -38,12 +38,13 @@ def CalculateMcRR(sort_list,eval_file,query_idx):
     for rank in ranks:
         if not rank==0:
             inverse_ranks.append(1/(rank-(i-1)))
+            i+=1
         else:
             inverse_ranks.append(0)
-    print(f'ranks:{ranks}')    
+    # print(f'ranks:{ranks}')    
      
-    MrRR = sum(inverse_ranks) / len(inverse_ranks)
-    return MrRR
+    McRR = sum(inverse_ranks) / len(inverse_ranks)
+    return McRR
 
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
@@ -68,7 +69,7 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
     for idx,item in tqdm(zip(query_idxs, sort_lists)):
         # 找出给定query-idx的正确代码的code-idx的first one
         code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
-        print(f'code_idxs:{code_idxs}')
+        # print(f'code_idxs:{code_idxs}')
         rank_i = []
         for code_idx in code_idxs:
             try:
@@ -87,7 +88,7 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
         if rank_x:
             rank_min = min(rank_x)
         ranks.append(rank_min)
-        print(f'ranks:{ranks}')
+        # print(f'ranks:{ranks}')
     for rank in ranks:
         if not rank == 0:
             inverse_ranks.append(1/rank)
@@ -199,8 +200,10 @@ def main():
     reader.close()
     directory.close()
 
-    CalculateMRR(sort_code_idxs,args.true_pairs_file,query_idxs)   
-    CalculateMMRR(sort_code_idxs,args.true_pairs_file,query_idxs)
+    mrr=CalculateMRR(sort_code_idxs,args.true_pairs_file,query_idxs)   
+    mmrr=CalculateMMRR(sort_code_idxs,args.true_pairs_file,query_idxs)
+    print(f'mrr={mrr}')
+    print(f'mmrr={mmrr}')
     print(f'error_idxs:{error_idxs}---------------')
     
 if __name__ == "__main__":
