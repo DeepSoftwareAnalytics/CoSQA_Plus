@@ -19,7 +19,7 @@ def process_CSN():
                 'url': item['url']
             }
         )
-    with open("CoSQA-plus/dataset/CSN-code-test.json","w") as f:
+    with open("CoSQA-plus/dataset/CSN-code.json","w") as f:
         json.dump(new_data,f)
 def merge_CSN_and_StaQC():
     with open("CoSQA-plus/dataset/CSN-code.json","r") as f:
