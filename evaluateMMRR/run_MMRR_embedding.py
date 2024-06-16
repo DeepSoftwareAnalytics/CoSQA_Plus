@@ -40,7 +40,7 @@ def evaluate(args):
     sort_idxs = []
     for sort_id in tqdm(sort_ids):
         sort_idx = []
-        for i in sort_id:
+        for i in sort_id[:1000]:
             sort_idx.append(code_dataset[i]['code-idx'])
         sort_idxs.append(sort_idx)
 
@@ -55,17 +55,17 @@ def evaluate(args):
     # 不应该用传进来的file_name,这里要用所有正确的pair来评测（因为不止一条对的，传进来的file_name可能只有一条对的）
     logger.info("calculating mmrr...")
     mmrr = CalculateMMRR(sort_idxs,args.true_pairs_file,query_idxs)
-
+    mrr = CalculateMRR(sort_idxs,args.true_pairs_file,query_idxs)
 
     result = {
+        "eval_mrr":float(mrr),
         "eval_mmrr":float(mmrr)
     }
 
     return result
 
-def CalculateMrRR(sort_list,data,query_idx):
-    
-        
+def CalculateMcRR(sort_list,data,query_idx):
+  
     # 找出给定query-idx的正确代码的code-idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
     # print(code_idxs)
@@ -78,24 +78,28 @@ def CalculateMrRR(sort_list,data,query_idx):
     inverse_ranks = []
     
     for code_idx in code_idxs:
-        ranks.append(sort_list.index(code_idx)+1)
-            # inverse_ranks.append(1/(sort_list.index(code_idx) + 2 - i))
-
-        # 对于lucene,有可能在选出来的code-idx中是找不到某个正确答案的 
-        # except ValueError:
-        #     inverse_ranks.append(0)
-    # 改了之后对于lucene的思路是不一样的，测lucene的时候要另外改
+        # 10000以后的置0
+        try: 
+            rank = sort_list.index(code_idx)+1
+            if rank <= 1000:
+                ranks.append(rank)
+            else:
+                ranks.append(0)
+        except ValueError:
+            ranks.append(0)
     ranks = sorted(ranks) #升序排序
     i=1
     for rank in ranks:
-        inverse_ranks.append(1/(rank-(i-1))) 
-        i+=1
+        if not rank==0:
+            inverse_ranks.append(1/(rank-(i-1)))
+            i+=1
+        else:
+            inverse_ranks.append(0)
     # print(f'ranks:{ranks}')
         
     MrRR = sum(inverse_ranks) / len(inverse_ranks)
     # print(f'The {query_idx}th query MrRR is {MrRR}')
     return MrRR
-
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
     sum = 0
@@ -103,12 +107,52 @@ def CalculateMMRR(sort_lists,eval_file,query_idxs):
     with open(eval_file,'r') as f:
         data = json.load(f)
     for idx,item in tqdm(zip(query_idxs, sort_lists),total=len(query_idxs)):
-        sum += CalculateMrRR(item,data,idx)
+        sum += CalculateMcRR(item,data,idx)
         cnt += 1
         
     MMRR = sum / cnt 
     print(f'eval_mmrr:{MMRR}')
     return MMRR 
+
+# sort_lists是按relevance降序排列的code_idxs
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    with open(eval_file,'r') as f:
+        data = json.load(f)
+    ranks = []
+    inverse_ranks = []
+    for idx,item in zip(query_idxs, sort_lists):
+        # 找出给定query-idx的正确代码的code-idx的first one
+        code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
+        # print(f'code_idxs:{code_idxs}')
+        rank_i = []
+        for code_idx in code_idxs:
+            try:
+                # 1000以后的置0
+                rank = item.index(code_idx)+1
+                if rank <= 1000:
+                    rank_i.append(rank)
+                else:
+                    rank_i.append(0) 
+            except ValueError:
+                rank_i.append(0)
+        # print(f'rank_i:{rank_i}')       
+        # 只有0返回0，有0有正返回最小正整数
+        rank_x = [num for num in rank_i if num > 0]
+        rank_min = 0
+        if rank_x:
+            rank_min = min(rank_x)
+        ranks.append(rank_min)
+        # print(f'ranks:{ranks}')
+    for rank in ranks:
+        if not rank == 0:
+            inverse_ranks.append(1/rank)
+        else:
+            inverse_ranks.append(0)
+    MRR = sum(inverse_ranks) / len(inverse_ranks)
+    print(f'eval_mrr:{MRR}')
+    return MRR
+     
+
 
 def pre_process(args):
     if args.codebase_file_pre_process:

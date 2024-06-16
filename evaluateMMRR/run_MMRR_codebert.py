@@ -27,17 +27,15 @@ import random
 import torch
 import json
 import numpy as np
-from model import UniXcoderModel,CodeBertModel
+from model import CodeBertModel
+from tqdm import tqdm
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler,TensorDataset
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                               RobertaConfig, RobertaModel, RobertaTokenizer)
-from transformers import AutoTokenizer, AutoModel
+
 logger = logging.getLogger(__name__)
-from tqdm import tqdm
-os.environ['TOKENIZERS_PARALLELISM'] = 'true'  # 或者 'false'
-###############################################################################
-# 目前没有改的：auto-label
+CUDA_VISIBLE_DEVICES="3"
 
 class InputFeatures(object):
     """A single training/test features for a example."""
@@ -55,7 +53,6 @@ class InputFeatures(object):
         self.code_ids = code_ids
         self.nl_tokens = nl_tokens
         self.nl_ids = nl_ids
-        ################# add:
         self.pair_idx = pair_idx
         self.query_idx = query_idx
         self.code_idx = code_idx
@@ -64,49 +61,19 @@ class InputFeatures(object):
 def convert_examples_to_features(js,tokenizer,args):
     
     """convert examples to token ids"""
-    model_name = args.model_name_or_path.split('/')[-1]
-    code = (" ".join(js["code"].split()))
-    if model_name == "unixcoder-base":
-        code_tokens = tokenizer.tokenize(code)[: args.code_length - 4]
-        code_tokens = (
-            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
-            + code_tokens
-            + [tokenizer.sep_token]
-        )
-        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
-    elif model_name == "codebert-base":
-        code_tokens = tokenizer.tokenize(code)[:args.code_length-2]
-        code_tokens = [tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
-        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
-    elif model_name == "codet5p-110m-embedding":
-        code_tokens = tokenizer.tokenize(code)[: args.code_length]
-        code_ids = tokenizer.encode(code)[: args.code_length]
+    code = ' '.join(js['code'].split())
+    code_tokens=tokenizer.tokenize(code)[:args.code_length-2]
+    code_tokens =[tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
+    code_ids =  tokenizer.convert_tokens_to_ids(code_tokens)
     padding_length = args.code_length - len(code_ids)
-    code_ids += [tokenizer.pad_token_id]*padding_length
+    code_ids+=[tokenizer.pad_token_id]*padding_length
 
-    nl = (" ".join(js["query"].split()))
-    if model_name == "unixcoder-base":
-        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
-        nl_tokens = (
-            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
-            + nl_tokens
-            + [tokenizer.sep_token]
-        )
-        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
-        padding_length = args.nl_length - len(nl_ids)
-        nl_ids += [tokenizer.pad_token_id]*padding_length
-    elif model_name == "codebert-base":
-        nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-2]
-        nl_tokens = [tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
-        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
-        padding_length = args.nl_length - len(nl_ids)
-        nl_ids += [tokenizer.pad_token_id]*padding_length
-    elif model_name == "codet5p-110m-embedding":
-        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length]
-        nl_ids = tokenizer.encode(nl)[: args.nl_length]
-        padding_length = args.nl_length - len(nl_ids)
-        nl_ids += [tokenizer.pad_token_id]*padding_length
-        
+    nl = ' '.join(js['query'].split())
+    nl_tokens=tokenizer.tokenize(nl)[:args.nl_length-2]
+    nl_tokens =[tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
+    nl_ids =  tokenizer.convert_tokens_to_ids(nl_tokens)
+    padding_length = args.nl_length - len(nl_ids)
+    nl_ids+=[tokenizer.pad_token_id]*padding_length     
     return InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['pair-idx'],js['query-idx'],js['code-idx'],js['label'])
     
 
@@ -118,7 +85,7 @@ class TextDataset(Dataset):
         with open(file_path) as f:
             data = json.load(f)
 
-        for js in tqdm(data):
+        for js in data:
             self.examples.append(convert_examples_to_features(js,tokenizer,args))
                 
         if "train" in file_path:
@@ -136,8 +103,6 @@ class TextDataset(Dataset):
     def __getitem__(self, i):   
         return (torch.tensor(self.examples[i].code_ids), torch.tensor(self.examples[i].nl_ids))
 
-
-            
 
 def set_seed(seed=42):
     random.seed(seed)
@@ -205,7 +170,7 @@ def train(args, model, tokenizer):
             scheduler.step() 
             
         #evaluate    
-        results = evaluate(args, model, tokenizer,args.eval_data_file, eval_when_training=True)
+        results = evaluate(args, model, tokenizer,args.query_file, eval_when_training=True)
         for key, value in results.items():
             logger.info("  %s = %s", key, round(value,4))    
             
@@ -216,7 +181,7 @@ def train(args, model, tokenizer):
             logger.info("  Best mrr:%s",round(best_mrr,4))
             logger.info("  "+"*"*20)                          
 
-            checkpoint_prefix = 'checkpoint-best-mmrr'
+            checkpoint_prefix = 'checkpoint-best-mrr'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))                        
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)                        
@@ -226,7 +191,7 @@ def train(args, model, tokenizer):
             logger.info("Saving model checkpoint to %s", output_dir)
 
 
-def CalculateMcRR(sort_list,data,query_idx,k=1000):
+def CalculateMcRR(sort_list,data,query_idx):
   
     # 找出给定query-idx的正确代码的code-idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
@@ -240,54 +205,48 @@ def CalculateMcRR(sort_list,data,query_idx,k=1000):
     inverse_ranks = []
     
     for code_idx in code_idxs:
-        # k以后的置0
-        try: 
-            rank = sort_list.index(code_idx)+1
-            if rank <= k:
-                ranks.append(rank)
-            else:
-                ranks.append(0)
-        except ValueError:
+        # 10000以后的置0
+        rank = sort_list.index(code_idx)+1
+        if rank <= 1000:
+            ranks.append(rank)
+        else:
             ranks.append(0)
     ranks = sorted(ranks) #升序排序
     i=1
     for rank in ranks:
         if not rank==0:
-            inverse_ranks.append(1/(rank-(i-1)))
+            inverse_ranks.append(1/(rank-(i-1))) 
             i+=1
         else:
             inverse_ranks.append(0)
     # print(f'ranks:{ranks}')
-    if len(inverse_ranks)==0:
-        return 0
-    MrRR = sum(inverse_ranks) / len(inverse_ranks)
-    # print(f'The {query_idx}th query MrRR is {MrRR}')
-    return MrRR
+        
+    McRR = sum(inverse_ranks) / len(inverse_ranks)
+    return McRR
 
 
-def CalculateMMRR(sort_lists,eval_file,query_idxs,k):
+def CalculateMMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MMRR--------------')
     sum = 0
     cnt = 0
     with open(eval_file,'r') as f:
         data = json.load(f)
-    for idx,item in tqdm(zip(query_idxs, sort_lists),total=len(query_idxs)):
-        sum += CalculateMcRR(item,data,idx,k=10)
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
+        sum += CalculateMcRR(item,data,idx)
         cnt += 1
         
     MMRR = sum / cnt 
-    # print(f'eval_mmrr:{MMRR}')
+    print(f'eval_mmrr:{MMRR}')
     return MMRR 
 
 # sort_lists是按relevance降序排列的code_idxs
-def CalculateMRR(sort_lists,eval_file,query_idxs,k=1000):
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MRR--------------')
     with open(eval_file,'r') as f:
         data = json.load(f)
     ranks = []
     inverse_ranks = []
-    MAP = 0
-    Precision = 0
-    Recall = 0
-    for idx,item in tqdm(zip(query_idxs, sort_lists),total=len(query_idxs)):
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
         # 找出给定query-idx的正确代码的code-idx的first one
         code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
         # print(f'code_idxs:{code_idxs}')
@@ -296,7 +255,7 @@ def CalculateMRR(sort_lists,eval_file,query_idxs,k=1000):
             try:
                 # 1000以后的置0
                 rank = item.index(code_idx)+1
-                if rank <= k:
+                if rank <= 1000:
                     rank_i.append(rank)
                 else:
                     rank_i.append(0) 
@@ -305,34 +264,19 @@ def CalculateMRR(sort_lists,eval_file,query_idxs,k=1000):
         # print(f'rank_i:{rank_i}')       
         # 只有0返回0，有0有正返回最小正整数
         rank_x = [num for num in rank_i if num > 0]
-        rank_x = sorted(rank_x)
         rank_min = 0
-        Precision += len(rank_x)/k
-        Recall += len(rank_x)/len(code_idxs)
         if rank_x:
             rank_min = min(rank_x)
-            # 每个query计算MAP
-            MAP += sum([(i+1)/rank_x[i] for i in range(len(rank_x))])/len(rank_x)
         ranks.append(rank_min)
         # print(f'ranks:{ranks}')
-    # 计算Precision
-    Precision = Precision / len(query_idxs)
-    # 计算Recall
-    Recall = Recall / len(query_idxs)
-    # 计算MAP
-    MAP = MAP / len(query_idxs)
-    # 计算MRR
     for rank in ranks:
         if not rank == 0:
             inverse_ranks.append(1/rank)
         else:
             inverse_ranks.append(0)
     MRR = sum(inverse_ranks) / len(inverse_ranks)
-
     print(f'eval_mrr:{MRR}')
-    print(f'eval_map:{MAP}')
-    return MRR,MAP,Precision,Recall
-            
+    return MRR
             
 def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     query_dataset = TextDataset(tokenizer, args, file_name)
@@ -352,52 +296,32 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
 
     
     model.eval()
-    code_vecs = None
-    nl_vecs = None
-    model_name = args.model_name_or_path.split('/')[-1]
-    # if os.path.exists(f'{model_name}_mmrr_code_vecs.pkl'):
-    #     with open(f'{model_name}_mmrr_code_vecs.pkl', 'rb') as f:
-    #         code_vecs = pickle.load(f)
-    # if os.path.exists(f'{model_name}_mmrr_nl_vecs.pkl'):
-    #     with open(f'{model_name}_mmrr_nl_vecs.pkl', 'rb') as f:
-    #         nl_vecs = pickle.load(f)
-    if nl_vecs is None:
-        nl_vecs = []
-        for batch in tqdm(query_dataloader):  
-            nl_inputs = batch[1].to(args.device)
-            with torch.no_grad():
-                if model_name == 'unixcoder-base' or 'codebert-base':
-                    nl_vec = model(nl_inputs)
-                elif model_name == 'codet5p-110m-embedding':
-                    nl_vec = model(nl_inputs)[0]
-                nl_vecs.append(nl_vec.cpu().numpy()) 
-        nl_vecs = np.concatenate(nl_vecs,0)
-    if code_vecs is None:
-        code_vecs = []
-        for batch in tqdm(code_dataloader):
-            code_inputs = batch[0].to(args.device)    
-            with torch.no_grad():
-                if model_name == 'unixcoder-base' or 'codebert-base':
-                    code_vec = model(code_inputs)
-                elif model_name == 'codet5p-110m-embedding':
-                    code_vec = model(code_inputs)[0]
-                code_vecs.append(code_vec.cpu().numpy())
-        code_vecs = np.concatenate(code_vecs,0)
-    model.train()
-        
+    code_vecs = [] 
+    nl_vecs = []
+    for batch in tqdm(query_dataloader):  
+        nl_inputs = batch[1].to(args.device)
+        with torch.no_grad():
+            nl_vec = model(nl_inputs=nl_inputs) 
+            nl_vecs.append(nl_vec.cpu().numpy()) 
+
+    for batch in tqdm(code_dataloader):
+        code_inputs = batch[0].to(args.device)    
+        with torch.no_grad():
+            code_vec = model(code_inputs=code_inputs)
+            code_vecs.append(code_vec.cpu().numpy())  
+    model.train()    
+    code_vecs = np.concatenate(code_vecs,0)
+    nl_vecs = np.concatenate(nl_vecs,0)
     
-    # pickle.dump(code_vecs,open(f'{model_name}_mmrr_code_vecs.pkl','wb'))
-    # pickle.dump(nl_vecs,open(f'{model_name}_mmrr_nl_vecs.pkl','wb'))
-    logger.info("embedding done and saved!")
     scores = np.matmul(nl_vecs,code_vecs.T)
-    logger.info("scores done!")
+    
     sort_ids = np.argsort(scores, axis=-1, kind='quicksort', order=None)[:,::-1]    
-    logger.info("sort done!")
+    
     # sort_ids不是idx，只是code投射下来的排名
     sort_idxs = []
-    for sort_id in tqdm(sort_ids):
+    for sort_id in sort_ids:
         sort_idx = []
-        for i in sort_id[:1000]:
+        for i in sort_id:
             sort_idx.append(code_dataset.examples[i].code_idx)
         sort_idxs.append(sort_idx)
 
@@ -405,22 +329,20 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     
     # 要获取sort_ids对应的所有query-idxs
     query_idxs = []
-    for example in tqdm(query_dataset.examples):
+    for example in query_dataset.examples:
         query_idxs.append(example.query_idx)
         
     # 计算mmrr    
     # 不应该用传进来的file_name,这里要用所有正确的pair来评测（因为不止一条对的，传进来的file_name可能只有一条对的）
-    logger.info("calculating mmrr...")
-    mmrr = CalculateMMRR(sort_idxs,args.true_pairs_file,query_idxs,k=10)
-    mrr,map,precision,recall = CalculateMRR(sort_idxs,args.true_pairs_file,query_idxs,k=10)
+    mmrr = CalculateMMRR(sort_idxs,args.true_pairs_file,query_idxs)
+    # 计算mrr
+    mrr = CalculateMRR(sort_idxs,args.true_pairs_file,query_idxs)
 
     result = {
-        "eval_mrr":float(mrr),
-        "eval_map":float(map),
-        "eval_precision":float(precision),
-        "eval_recall":float(recall),
-        "eval_mmrr":float(mmrr)
+        "eval_mmrr":float(mmrr),
+        "eval_mrr":float(mrr)
     }
+    
 
     return result
 
@@ -450,11 +372,11 @@ def pre_process(args):
             js["label"] = ""
         with open(args.query_file,'w') as f:
             json.dump(data,f,indent=4)
-        print(f'transformed!')  
-                        
+        print(f'transformed!')                  
                         
 def main():
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser() 
+    
 
     ## Required parameters
     parser.add_argument("--train_data_file", default=None, type=str, 
@@ -530,21 +452,19 @@ def main():
     
     # Set seed
     set_seed(args.seed)
-    model_name = args.model_name_or_path.split('/')[-1]
-    # load model and tokenizer
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path,trust_remote_code=True)
-    model = AutoModel.from_pretrained(args.model_name_or_path,trust_remote_code=True)
-    if model_name == 'unixcoder-base':
-        model = UniXcoderModel(model)
-    elif model_name == 'codebert-base':
-        model = CodeBertModel(model)
+
+    #build model
+    tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path)
+    config = RobertaConfig.from_pretrained(args.model_name_or_path)
+    model = RobertaModel.from_pretrained(args.model_name_or_path) 
+ 
     
-    # model = Model(model)
+    model = CodeBertModel(model)
     logger.info("Training/evaluation parameters %s", args)
     
     model.to(args.device)
     if args.n_gpu > 1:
-        model = torch.nn.DataParallel(model)
+        model = torch.nn.DataParallel(model)  
     
     # Process codebase
     pre_process(args)
@@ -561,10 +481,11 @@ def main():
             checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model  
-            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
+            model_to_load.load_state_dict(torch.load(output_dir))      
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.eval_data_file)
         logger.info("***** Eval results *****")
+        print(result)
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],3)))
             
@@ -572,18 +493,17 @@ def main():
         if args.do_zero_shot is False:
             checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
-            model_to_load = model.module if hasattr(model, 'module') else model 
-            # 目前不知道什么原因需要绝对路径才能识别
-            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
+            model_to_load = model.module if hasattr(model, 'module') else model  
+            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_plus/codebert/checkpoint-best-mrr/model.bin"))      
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.query_file)
         logger.info("***** Eval results *****")
+        print(result)
         for key in sorted(result.keys()):
             logger.info("  %s = %s", key, str(round(result[key],3)))
 
 
 if __name__ == "__main__":
     main()
-
 
 

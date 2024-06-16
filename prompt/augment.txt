@@ -1,0 +1,2 @@
+query:<query>
+Generate a Python code snippet that fully satisfies the query. Provide only the code snippet, without any explanation.

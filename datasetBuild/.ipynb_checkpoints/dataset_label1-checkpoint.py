@@ -11,7 +11,7 @@ from datetime import datetime
 import sys
 import re
 import os
-from askLLM import askgpt,ask_ollama
+from askLLM import askgpt,ask_ollama,askdeepseek
 def judge_match():
     """
     judge_match() 负责调用 askgpt 函数，并获取其返回值，然后将返回值放入表格对象中
@@ -19,10 +19,10 @@ def judge_match():
     为了提高速度，这里采用了多线程并发处理
     """
     logging.info("start the judge!")
-    input_file = "CoSQA-plus/dataset/GPT4o_augment_query_code_pairs_1000.json"
-    output_file = "CoSQA-plus/dataset/GPT4o_query_code_pairs_1000_annotation_claude3sonnet.csv"
+    input_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000.json"
+    output_file = "CoSQA-plus/dataset/human-label/half_match_human_query_code_pairs_1000_llama370b.csv"
     temp_file = "temp_output.csv"
-    pickle_file = "CoSQA-plus/dataset/GPT4o_query_code_pairs_1000_annotation_claude3sonnet.pkl"
+    pickle_file = "CoSQA-plus/dataset/human-label/half_match_human_query_code_pairs_1000_llama370b.pkl"
     # 读取之前保存的 csv 文件
     try:
         df = pd.read_csv(output_file, index_col=0)
@@ -34,11 +34,10 @@ def judge_match():
     with open(input_file, "r") as file:
         json_data = json.load(file)
         l = len(json_data)
-        # l = 200
-    max_concurrent_tasks = 100 # 最大并发任务数
+    max_concurrent_tasks = 4 # 最大并发任务数
     now_index = 0
     # 最大线程数设为50
-    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=100) as executor:
+    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=4) as executor:
         futures = []
         while now_index < l:
             for i in range(max_concurrent_tasks-len(futures)):
@@ -66,7 +65,7 @@ def judge_match():
                 # 将当前数据条目的 DataFrame 添加到整体 DataFrame
                 df = pd.concat([df, df_current])
                 # 保存当前 DataFrame 到表格
-                if now_index1%51==0:
+                if now_index1%3==0:
                     df.to_csv(temp_file)
                     df.to_pickle(pickle_file)
                     os.replace(temp_file, output_file)
@@ -80,7 +79,7 @@ def judge_match():
 
 
 def get_prompt(query,code):
-    with open("CoSQA-plus/prompt/label_cot.txt","r") as f:
+    with open("CoSQA-plus/prompt/50%match.txt","r") as f:
         prompt=f.read()
     return prompt.replace('<code>',code).replace('<query>',query)
 
@@ -90,30 +89,31 @@ def judge_task(data, index):
     :param data: json文件中的每个数据
     :return: 处理好的表格数据df_current
     """
+    # idx_val = data["pair-index"]
     prompt = get_prompt(data['query'],data['code'])
-    answer_json, model = askgpt(prompt)
-    # answer_json, model = ask_ollama(prompt)
+    # answer_json, model = askgpt(prompt)
+    answer_json, model = ask_ollama(prompt)
+    # answer_json,model = askdeepseek(prompt)
     if answer_json is None:
         return None,index
-    df_current = pd.DataFrame({
-        # "pair-index": [data["pair-idx"]],
-        "query-index": [data["query-index"]],
-        "query": [data["query"]],
-        # "code-index": [data["code-idx"]],
-        "code":[data["code"]],
-        "model": [model],
-        "origin_answer":[answer_json]
-    }, index=[index])
     # df_current = pd.DataFrame({
-    #     "pair-index": [data["pair-idx"]],
-    #     "query-index": [data["query-idx"]],
-    #     "query": [data["query"]],
-    #     "code-index": [data["code-idx"]],
+    #     "pair-index": [idx_val],
+    #     "query-index": [data["query-index"]],
+    #     "code-index": [data["code-index"]],
     #     "code":[data["code"]],
     #     "model": [model],
-    #     "label":[data["label"]],
     #     "origin_answer":[answer_json]
-    # },index=[index])
+    # }, index=[index])
+    df_current = pd.DataFrame({
+        "pair-index": [data["pair-idx"]],
+        "query-index": [data["query-idx"]],
+        "query": [data["query"]],
+        "code-index": [data["code-idx"]],
+        "code":[data["code"]],
+        "model": [model],
+        "label":[data["label"]],
+        "origin_answer":[answer_json]
+    },index=[index])
     return df_current, index
 
 

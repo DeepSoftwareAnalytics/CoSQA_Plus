@@ -13,9 +13,7 @@ def ask_text_embedding(text):
     models = ['text-embedding-3-large']
     max_retries = 2  # 最大重试次数
     retry_delay = 5  # 初始重试延迟（秒）
-    max_retry_delay = 100  # 最大重试延迟（秒）
-
-    # 从优先级队列中获取最晚调用时间最早的 API 密钥
+    max_retry_delay = 30  # 最大重试延迟（秒）
     
     client = OpenAI(api_key=apikey,base_url="https://api.xiaoai.plus/v1")
 
@@ -55,7 +53,6 @@ def askgpt(text):
     retry_delay = 5  # 初始重试延迟（秒）
     max_retry_delay = 100  # 最大重试延迟（秒）
 
-    # 从优先级队列中获取最晚调用时间最早的 API 密钥
     
     client = OpenAI(api_key=apikey,base_url="https://api.xiaoai.plus/v1")
 

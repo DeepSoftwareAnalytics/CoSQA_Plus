@@ -20,9 +20,9 @@ def judge_match():
     """
     logging.info("start the judge!")
     input_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000.json"
-    output_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_deepseekchat.csv"
+    output_file = "CoSQA-plus/dataset/human-label/half_match_human_query_code_pairs_1000_claude3sonnet3.csv"
     temp_file = "temp_output.csv"
-    pickle_file = "CoSQA-plus/dataset/human-label/human_query_code_pairs_1000_deepseekchat.pkl"
+    pickle_file = "CoSQA-plus/dataset/human-label/half_match_human_query_code_pairs_1000_claude3sonnet3.pkl"
     # 读取之前保存的 csv 文件
     try:
         df = pd.read_csv(output_file, index_col=0)
@@ -37,7 +37,7 @@ def judge_match():
     max_concurrent_tasks = 250 # 最大并发任务数
     now_index = 0
     # 最大线程数设为50
-    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=50) as executor:
+    with concurrent.futures.thread.ThreadPoolExecutor(max_workers=250) as executor:
         futures = []
         while now_index < l:
             for i in range(max_concurrent_tasks-len(futures)):
@@ -79,7 +79,7 @@ def judge_match():
 
 
 def get_prompt(query,code):
-    with open("CoSQA-plus/prompt/label_cot.txt","r") as f:
+    with open("CoSQA-plus/prompt/50%match.txt","r") as f:
         prompt=f.read()
     return prompt.replace('<code>',code).replace('<query>',query)
 
@@ -91,9 +91,9 @@ def judge_task(data, index):
     """
     # idx_val = data["pair-index"]
     prompt = get_prompt(data['query'],data['code'])
-    # answer_json, model = askgpt(prompt)
+    answer_json, model = askgpt(prompt)
     # answer_json, model = ask_ollama(prompt)
-    answer_json,model = askdeepseek(prompt)
+    # answer_json,model = askdeepseek(prompt)
     if answer_json is None:
         return None,index
     # df_current = pd.DataFrame({
@@ -111,7 +111,7 @@ def judge_task(data, index):
         "code-index": [data["code-idx"]],
         "code":[data["code"]],
         "model": [model],
-        "label":[data["label"]],
+        # "label":[data["label"]],
         "origin_answer":[answer_json]
     },index=[index])
     return df_current, index

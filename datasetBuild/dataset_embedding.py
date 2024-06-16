@@ -20,10 +20,11 @@ def judge_match():
     为了提高速度，这里采用了多线程并发处理
     """
     logging.info("start the judge!")
-    input_file = "CoSQA-plus/dataset/augment_codebase.json"
+    # input_file = "CoSQA-plus/dataset/query.json"
+    input_file = "CoSQA-plus/dataset/stage_3_augment/gpt4o_augment_codebase.json"
     # output_file = "dataset_annotation_claude3_code_GPT4.csv"
     temp_file = "temp_output.pkl"
-    pickle_file = "CoSQA-plus/dataset/code_embedding.pkl"
+    pickle_file = "CoSQA-plus/dataset/new_text_embedding_large_code_embedding.pkl"
     # 读取之前保存的 csv 文件
     try:
         # df = pd.read_csv(output_file, index_col=0)
@@ -81,6 +82,7 @@ def judge_match():
 
 
 def judge_task(data, index):
+    # embedding, model = ask_text_embedding(data["query"])
     embedding, model = ask_text_embedding(data["code"])
     # answer_json, model = ask_ollama(prompt)
     if embedding is None:
