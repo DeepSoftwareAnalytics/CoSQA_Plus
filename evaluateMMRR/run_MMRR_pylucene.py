@@ -2,6 +2,7 @@ import json
 import lucene
 import argparse
 import numpy as np
+from tqdm import tqdm
 from org.apache.lucene.analysis.standard import StandardAnalyzer
 from org.apache.lucene.document import Document, Field, TextField
 from org.apache.lucene.index import IndexWriter, IndexWriterConfig, DirectoryReader
@@ -11,20 +12,24 @@ from org.apache.lucene.queryparser.classic import QueryParser
 from java.nio.file import Paths
 
 
-def CalculateMrRR(sort_list,eval_file,query_idx):
+def CalculateMcRR(sort_list,eval_file,query_idx):
     with open(eval_file,'r') as f:
         data = json.load(f)
         
     # 找出给定query_idx的正确代码的code_idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
-    print(code_idxs)
+    # print(code_idxs)
 
     # 在list里面找到code_idx的rank并求倒数
     ranks = []
     inverse_ranks = []
     for code_idx in code_idxs:
         try:
-            ranks.append(sort_list.index(code_idx)+1)
+            rank = sort_list.index(code_idx)+1
+            if rank <= 1000:
+                ranks.append(rank)
+            else:
+                ranks.append(0)
         #对于lucene,有可能在选出来的code_idx中是找不到某个正确答案的 
         except ValueError:
             ranks.append(0)
@@ -33,27 +38,65 @@ def CalculateMrRR(sort_list,eval_file,query_idx):
     for rank in ranks:
         if not rank==0:
             inverse_ranks.append(1/(rank-(i-1)))
+            i+=1
         else:
             inverse_ranks.append(0)
-    print(f'ranks:{ranks}')    
+    # print(f'ranks:{ranks}')    
      
-    MrRR = sum(inverse_ranks) / len(inverse_ranks)
-    print(f'The {query_idx}th query MrRR is {MrRR}')
-    return MrRR
+    McRR = sum(inverse_ranks) / len(inverse_ranks)
+    return McRR
 
 
 def CalculateMMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MMRR--------------------')
     sum = 0
     cnt = 0
-    for idx,item in zip(query_idxs, sort_lists):
-        sum += CalculateMrRR(item,eval_file,idx)
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
+        sum += CalculateMcRR(item,eval_file,idx)
         cnt += 1
         
     MMRR = sum / cnt 
     print(f'eval_mmrr:{MMRR}-------------------')
     return MMRR 
 
-
+# sort_lists是按relevance降序排列的code_idxs
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MRR---------------------')
+    with open(eval_file,'r') as f:
+        data = json.load(f)
+    ranks = []
+    inverse_ranks = []
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
+        # 找出给定query-idx的正确代码的code-idx的first one
+        code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
+        # print(f'code_idxs:{code_idxs}')
+        rank_i = []
+        for code_idx in code_idxs:
+            try:
+                # 1000以后的置0
+                rank = item.index(code_idx)+1
+                if rank <= 1000:
+                    rank_i.append(rank)
+                else:
+                    rank_i.append(0) 
+            except ValueError:
+                rank_i.append(0)
+        print(f'rank_i:{rank_i}')       
+        # 只有0返回0，有0有正返回最小正整数
+        rank_x = [num for num in rank_i if num > 0]
+        rank_min = 0
+        if rank_x:
+            rank_min = min(rank_x)
+        ranks.append(rank_min)
+        # print(f'ranks:{ranks}')
+    for rank in ranks:
+        if not rank == 0:
+            inverse_ranks.append(1/rank)
+        else:
+            inverse_ranks.append(0)
+    MRR = sum(inverse_ranks) / len(inverse_ranks)
+    print(f'eval_mrr:{MRR}')
+    return MRR
         
     
 def main():
@@ -89,7 +132,8 @@ def main():
     writer = IndexWriter(directory, config)
 
     # 创建文档并添加到索引
-    for item in codebase:
+    print(f'construct codebase----------')
+    for item in tqdm(codebase):
         doc = Document()
         doc.add(TextField("code", item["code"], Field.Store.YES))
         doc.add(TextField("code-idx", str(item["code-idx"]), Field.Store.YES))
@@ -111,8 +155,10 @@ def main():
     query_idxs = []
     sort_code_idxs = []
     error_idxs = []
+    
+    print(f'constructing queries--------------')
     # 计算每条查询与每条代码的相关性得分
-    for query_item in queries:
+    for query_item in tqdm(queries):
         query_idx = query_item["query-idx"]
         query_str = query_item["query"]
         
@@ -130,7 +176,7 @@ def main():
                 code_idx = int(doc.get("code-idx"))
                 code_idxs.append(code_idx)
                 score = hit.score
-                print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
+                # print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
                 scores.append(score)
 
             query_idxs.append(query_item["query-idx"])
@@ -154,7 +200,10 @@ def main():
     reader.close()
     directory.close()
 
-    CalculateMMRR(sort_code_idxs,args.true_pairs_file,query_idxs)   
+    mrr=CalculateMRR(sort_code_idxs,args.true_pairs_file,query_idxs)   
+    mmrr=CalculateMMRR(sort_code_idxs,args.true_pairs_file,query_idxs)
+    print(f'mrr={mrr}')
+    print(f'mmrr={mmrr}')
     print(f'error_idxs:{error_idxs}---------------')
     
 if __name__ == "__main__":
