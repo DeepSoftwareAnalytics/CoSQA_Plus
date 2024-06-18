@@ -35,6 +35,8 @@ from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                               RobertaConfig, RobertaModel, RobertaTokenizer)
 
 logger = logging.getLogger(__name__)
+CUDA_VISIBLE_DEVICES="3"
+
 class InputFeatures(object):
     """A single training/test features for a example."""
     def __init__(self,
@@ -59,7 +61,16 @@ class InputFeatures(object):
 def convert_examples_to_features(js,tokenizer,args):
     
     """convert examples to token ids"""
-    code = ' '.join(js['code'].split())
+    # code = ' '.join(js['code'].split())
+    try:
+        code = ' '.join(js['code'].split())
+    except KeyError:
+        code = ' '
+        print("Key 'code' not found in js:", js)
+    except AttributeError:
+        code = ' '
+        print("The value associated with 'code' is not a string in js:", js)
+
     code_tokens = tokenizer.tokenize(code)[:args.code_length-4]
     code_tokens =[tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+code_tokens+[tokenizer.sep_token]
     code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
@@ -219,7 +230,6 @@ def CalculateMcRR(sort_list,data,query_idx):
             i+=1
         else:
             inverse_ranks.append(0)
-    # print(f'ranks:{ranks}')
         
     McRR = sum(inverse_ranks) / len(inverse_ranks)
     return McRR
@@ -249,7 +259,6 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
     for idx,item in tqdm(zip(query_idxs, sort_lists)):
         # 找出给定query-idx的正确代码的code-idx的first one
         code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
-        # print(f'code_idxs:{code_idxs}')
         rank_i = []
         for code_idx in code_idxs:
             try:
@@ -260,8 +269,7 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
                 else:
                     rank_i.append(0) 
             except ValueError:
-                rank_i.append(0)
-        # print(f'rank_i:{rank_i}')       
+                rank_i.append(0)  
         # 只有0返回0，有0有正返回最小正整数
         rank_x = [num for num in rank_i if num > 0]
         rank_min = 0
@@ -505,5 +513,6 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
