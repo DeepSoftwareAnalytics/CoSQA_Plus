@@ -10,7 +10,7 @@ Testing code search models and methods requires downloading and configuring vari
 
 Testing large models for question answering primarily focuses on evaluating the performance of various large models in question answering, calculating their Krippendorff’s alpha compared to human annotators and their accuracy relative to standards.
 
-Experimen Environment:
+Experiment Environment:
 
 Hardware:
 
