@@ -1,6 +1,6 @@
 # CoSQA-plus
 
-This repository contains code and datasets for the paper "CoSQA+:"
+This repository contains code and datasets for the paper "CoSQA+: Enhancing Code Search Dataset with Matching Code".
 
 Our primary work can be divided into three parts: constructing CoSQA+, testing large models for question answering, and testing code search models and methods. This code repository will provide the corresponding code for these three sections as well as the data required to reproduce the results.
 
