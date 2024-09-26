@@ -10,7 +10,11 @@ Testing code search models and methods requires downloading and configuring vari
 
 Testing large models for question answering primarily focuses on evaluating the performance of various large models in question answering, calculating their Krippendorff’s alpha compared to human annotators and their accuracy relative to standards.
 
-If you just want to use CoSQA+ dataset itself, goto [Test on CoSQA+](#test-on-cosqa) directly.
+**Performance of CoSQA+**:
+
+<img src="image/README/1727367035492.png" alt="1727367035492" style="zoom:50%;" />
+
+**If you just want to use CoSQA+ dataset itself, goto [Train on CoSQA+](#train-on-cosqa) and [Test on CoSQA+](#test-on-cosqa) directly.**
 
 ## Model Size & Budget
 
@@ -58,15 +62,15 @@ The datasets are currently available for viewing at the following Google Drive l
 
 https://drive.google.com/drive/folders/1yoIoNfVI4vN5dk3VLuvGGorOE4fOleDT?usp=sharing
 
-| Filename                                       | Content                                                      |
-| ---------------------------------------------- | ------------------------------------------------------------ |
-| StaQC-code.json                                | python codebase from StaQC                                   |
-| CSN-StaQC-code.json                            | python codebase from StaQC and CSN                           |
+| Filename                                       | Content                                                           |
+| ---------------------------------------------- | ----------------------------------------------------------------- |
+| StaQC-code.json                                | python codebase from StaQC                                       |
+| CSN-StaQC-code.json                            | python codebase from StaQC and CSN                                |
 | gpt4o_augment_codebase.json                    | CoSQA+ codebase (GPT-4o generated code + code from StaQC and CSN) |
-| query.json                                     | query of CoSQA/CoSQA+                                        |
-| dataset_annotation_claude3sonnet_processed.csv | the query-code pairs annotation result of Claude 3 Sonnet    |
-| gpt4o_augment_query_code_pairs.json            | all query-code pairs of CoSQA+                               |
-| gpt4o_augment_query_code_pairs_for_search.json | query-code pairs labelled "1"" of CoSQA+                     |
+| query.json                                     | query of CoSQA/CoSQA+                                             |
+| dataset_annotation_claude3sonnet_processed.csv | the query-code pairs annotation result of Claude 3 Sonnet       |
+| gpt4o_augment_query_code_pairs.json            | all query-code pairs of CoSQA+                                    |
+| gpt4o_augment_query_code_pairs_for_search.json | query-code pairs labelled "1"" of CoSQA+                         |
 
 CoSQA+ codebase: `gpt4o_augment_codebase.json`
 
@@ -157,7 +161,7 @@ csproject/
 
 ## CoSQA+ Construction
 
-Note that **fully reproducing this part requires significant resources**, especially since annotating with large models incurs high costs. Therefore, we mainly provide guidelines for reproducing query-to-code matching using a multi-model approach. 
+Note that **fully reproducing this part requires significant resources**, especially since annotating with large models incurs high costs. Therefore, we mainly provide guidelines for reproducing query-to-code matching using a multi-model approach.
 
 ### Download Code Datasets
 
@@ -207,9 +211,9 @@ Call `process_query()` in `datasetBuild/process_data.py` to complete the process
 
 The main task of matching code to queries is done by `datasetBuild/select_code.py`.
 
-For the amount of code is so large, the task is divided into 2 steps: 
+For the amount of code is so large, the task is divided into 2 steps:
 
-1) embed query & code with three models 
+1) embed query & code with three models
 2) select code by calculating similarity
 
 #### 1 Embed Query&Code
@@ -313,9 +317,9 @@ Then, use `dataset_label.py`(relies on `askLLM.py`) for annotaton. You need to m
 
 1. For `askLLM.py` , modify the path to read your `apikey.txt` or you can just directly wirte you api key in code. Furthermore, you need to setup the model and other setting options.
 2. For `dataset_label.py`
-   1. modify `input_file` and `output_file` to set the path of input file (`query_code_pairs.json`) and output_file (such as `dataset_annotation_claude3sonnet.json`). 
-   2. modify `max_concurrent_tasks` to adjust the num of threads for request LLM api. 
-   3. modify the file path in `def get_prompt(query,code)` function to set the prompt. 
+   1. modify `input_file` and `output_file` to set the path of input file (`query_code_pairs.json`) and output_file (such as `dataset_annotation_claude3sonnet.json`).
+   2. modify `max_concurrent_tasks` to adjust the num of threads for request LLM api.
+   3. modify the file path in `def get_prompt(query,code)` function to set the prompt.
 
 After that, we get answers from LLM (`f `) which need to be extracted the final judgement. Use `def judgement_extraction(input_file, processed_file)` function to do that :
 
@@ -340,7 +344,7 @@ Finally, we will get annotation results in `final_query_code_pairs.json`，which
 ]
 ```
 
-Finish primary annotation, the next step is find out queries without matched code. 
+Finish primary annotation, the next step is find out queries without matched code.
 
 ## Test LLMs for Annotation
 
@@ -376,11 +380,9 @@ Download datasets:
 2. CoSQA+ for fine-tune : https://drive.google.com/drive/folders/1hP8253ao1G95ddWwgeyrezxGXULnlHEe?usp=sharing
 3. CSN99 Python : https://drive.google.com/drive/folders/16u9Ob7Jskqzs0oNzmoN-q-CHVaMuHShA?usp=sharing
 
-
-
 Download models:
 
-1. CodeBERT (provided by [GraphCodeBERT](https://github.com/microsoft/CodeBERT/tree/master/GraphCodeBERT) team)  https://drive.google.com/file/d/1ZO-xVIzGcNE6Gz9DEg2z5mIbBv4Ft1cK/view 
+1. CodeBERT (provided by [GraphCodeBERT](https://github.com/microsoft/CodeBERT/tree/master/GraphCodeBERT) team)  https://drive.google.com/file/d/1ZO-xVIzGcNE6Gz9DEg2z5mIbBv4Ft1cK/view
 2. UniXcoder  [microsoft/unixcoder-base · Hugging Face](https://huggingface.co/microsoft/unixcoder-base)
 3. CodeT5+ 110M embedding  [Salesforce/codet5p-110m-embedding · Hugging Face](https://huggingface.co/Salesforce/codet5p-110m-embedding)
 
@@ -639,7 +641,7 @@ CUDA_VISIBLE_DEVICES="0,1,2,3" python CoSQA-plus/evaluateMMRR/run_MMRR_transform
     --seed 123456 2>&1| tee CoSQA-plus/log/UniXcoder-finetune-csn99-test.log
 ```
 
-CoSQA 
+CoSQA
 
 ```Shell
 CUDA_VISIBLE_DEVICES="0,1,2,3" python CoSQA-plus/evaluateMMRR/run_MMRR_transformer.py \
@@ -789,7 +791,7 @@ CUDA_VISIBLE_DEVICES="0,1,2,3" /mnt/thinkerhui/.venv/bin/python CoSQA-plus/evalu
     --eval_batch_size 64 \
     --learning_rate 2e-5 \
     --seed 123456  2>&1| tee CoSQA-plus/log/unixcoder-finetune-mmrr2.log
-    
+  
 CUDA_VISIBLE_DEVICES="0,1,2,3" python CoSQA-plus/evaluateMMRR/run_MMRR_transformer.py \
     --output_dir /mnt/thinkerhui/saved_models/cosqa/codet5p-110m-embedding \
     --model_name_or_path model/codet5p-110m-embedding  \
@@ -824,11 +826,9 @@ scipy
 python CoSQA-plus/evaluateMMRR/bow_MMRR.py
 ```
 
-
-
 And run `run_MMRR_pylucene.py` is a little more complex.
 
-Download the source code for Pylucene [here]([Index of /lucene/pylucene (apache.org)](https://dlcdn.apache.org/lucene/pylucene/)). Download Pylucene-9.6.0-src.Tar.Gz. The source package contains all the packages you need to build manually. Extract the source package into the directory you want. 
+Download the source code for Pylucene [here]([Index of /lucene/pylucene (apache.org)](https://dlcdn.apache.org/lucene/pylucene/)). Download Pylucene-9.6.0-src.Tar.Gz. The source package contains all the packages you need to build manually. Extract the source package into the directory you want.
 
 Install Temurin Java (Adoptium) :
 
@@ -847,7 +847,7 @@ Install gcc, g++ and make:
 sudo apt install gcc g++ make
 ```
 
-Build Pylecene go back to the Directory ~/pylecene-9.6.0 and edit the Makefile. As you can see in the first half of the file, there are many different system configurations that have been commented out. We need to find our own system configuration, uncomment it, and then change the configuration to the correct one based on the actual situation. The actual job is to validate the Python path. Here, we find the configuration code for Linux + Python 3, uncomment it and confirm as follows. 
+Build Pylecene go back to the Directory ~/pylecene-9.6.0 and edit the Makefile. As you can see in the first half of the file, there are many different system configurations that have been commented out. We need to find our own system configuration, uncomment it, and then change the configuration to the correct one based on the actual situation. The actual job is to validate the Python path. Here, we find the configuration code for Linux + Python 3, uncomment it and confirm as follows.
 
 ```
 # Linux     (Ubuntu 64-bit, Python 3.9.2, Temurin Java 17
