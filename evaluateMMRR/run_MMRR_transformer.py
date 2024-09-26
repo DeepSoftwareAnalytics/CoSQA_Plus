@@ -81,6 +81,8 @@ def convert_examples_to_features(js,tokenizer,args):
     elif model_name == "codet5p-110m-embedding":
         code_tokens = tokenizer.tokenize(code)[: args.code_length]
         code_ids = tokenizer.encode(code)[: args.code_length]
+    # elif model_name == "stella_en_400M_v5":
+        
     padding_length = args.code_length - len(code_ids)
     code_ids += [tokenizer.pad_token_id]*padding_length
 
@@ -172,6 +174,7 @@ def train(args, model, tokenizer):
     model.zero_grad()
     
     # InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['pair-idx'],js['query-idx'],js['code-idx'],js['label'])
+    model_name = args.model_name_or_path.split('/')[-1]
 
     model.train()
     tr_num,tr_loss,best_mrr = 0,0,0 
@@ -181,8 +184,17 @@ def train(args, model, tokenizer):
             code_inputs = batch[0].to(args.device)    
             nl_inputs = batch[1].to(args.device)
             #get code and nl vectors
-            code_vec = model(code_inputs=code_inputs)
-            nl_vec = model(nl_inputs=nl_inputs)
+            # code_vec = model(code_inputs)
+            # nl_vec = model(nl_inputs)
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                code_vec = model(code_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                code_vec = model(code_inputs)[0]
+                
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                nl_vec = model(nl_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                nl_vec = model(nl_inputs)[0]
             
             #calculate scores and loss
             scores = torch.einsum("ab,cb->ac",nl_vec,code_vec)
@@ -205,7 +217,7 @@ def train(args, model, tokenizer):
             scheduler.step() 
             
         #evaluate    
-        results = evaluate(args, model, tokenizer,args.eval_data_file, eval_when_training=True)
+        results = evaluate(args, model, tokenizer,args.query_file, eval_when_training=True)
         for key, value in results.items():
             logger.info("  %s = %s", key, round(value,4))    
             
@@ -216,7 +228,7 @@ def train(args, model, tokenizer):
             logger.info("  Best mrr:%s",round(best_mrr,4))
             logger.info("  "+"*"*20)                          
 
-            checkpoint_prefix = 'checkpoint-best-mmrr'
+            checkpoint_prefix = 'checkpoint-best-mrr'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))                        
             if not os.path.exists(output_dir):
                 os.makedirs(output_dir)                        
@@ -558,10 +570,10 @@ def main():
     results = {}
     if args.do_eval:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
+            checkpoint_prefix = 'checkpoint-best-mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model  
-            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
+            model_to_load.load_state_dict(torch.load(output_dir))    
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.eval_data_file)
         logger.info("***** Eval results *****")
@@ -570,11 +582,10 @@ def main():
             
     if args.do_test:
         if args.do_zero_shot is False:
-            checkpoint_prefix = 'checkpoint_best_mrr/model.bin'
+            checkpoint_prefix = 'checkpoint-best-mrr/model.bin'
             output_dir = os.path.join(args.output_dir, '{}'.format(checkpoint_prefix))  
             model_to_load = model.module if hasattr(model, 'module') else model 
-            # 目前不知道什么原因需要绝对路径才能识别
-            model_to_load.load_state_dict(torch.load("/mnt/thinkerhui/saved_models/cosqa_relabel/checkpoint-best-mrr/model.bin"))      
+            model_to_load.load_state_dict(torch.load(output_dir))
         model.to(args.device)
         result = evaluate(args, model, tokenizer,args.query_file)
         logger.info("***** Eval results *****")

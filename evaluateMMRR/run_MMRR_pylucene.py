@@ -18,6 +18,7 @@ def CalculateMcRR(sort_list,eval_file,query_idx):
         
     # 找出给定query_idx的正确代码的code_idx
     code_idxs = [item['code-idx'] for item in data if item['query-idx'] == query_idx]
+    # print(code_idxs)
 
     # 在list里面找到code_idx的rank并求倒数
     ranks = []
@@ -87,6 +88,7 @@ def CalculateMRR(sort_lists,eval_file,query_idxs):
         if rank_x:
             rank_min = min(rank_x)
         ranks.append(rank_min)
+        # print(f'ranks:{ranks}')
     for rank in ranks:
         if not rank == 0:
             inverse_ranks.append(1/rank)
@@ -110,9 +112,11 @@ def main():
                         help="An optional query input test data file to test the MMRR(a josn file).")
     
     args = parser.parse_args()
-
+    
+    # 初始化 JVM
     lucene.initVM()
 
+    # 读取 codebase.json 文件
     with open(args.codebase_file, 'r') as f:
         codebase = json.load(f)
 
@@ -172,6 +176,7 @@ def main():
                 code_idx = int(doc.get("code-idx"))
                 code_idxs.append(code_idx)
                 score = hit.score
+                # print(f"query-idx:{query_idx} code-idx:{code_idx} score:{hit.score}")
                 scores.append(score)
 
             query_idxs.append(query_item["query-idx"])

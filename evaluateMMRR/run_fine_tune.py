@@ -27,12 +27,14 @@ import random
 import torch
 import json
 import numpy as np
-from model import Model
+# from model import Model
+from model import UniXcoderModel,CodeBertModel
+from transformers import AutoTokenizer, AutoModel
 from torch.nn import CrossEntropyLoss, MSELoss
 from torch.utils.data import DataLoader, Dataset, SequentialSampler, RandomSampler,TensorDataset
 from transformers import (WEIGHTS_NAME, AdamW, get_linear_schedule_with_warmup,
                               RobertaConfig, RobertaModel, RobertaTokenizer)
-
+from tqdm import tqdm
 logger = logging.getLogger(__name__)
 
 
@@ -54,22 +56,87 @@ class InputFeatures(object):
 
         
 def convert_examples_to_features(js,tokenizer,args):
+    
     """convert examples to token ids"""
+    model_name = args.model_name_or_path.split('/')[-1]
     code = ' '.join(js['code_tokens']) if type(js['code_tokens']) is list else ' '.join(js['code_tokens'].split())
-    code_tokens = tokenizer.tokenize(code)[:args.code_length-4]
-    code_tokens =[tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+code_tokens+[tokenizer.sep_token]
-    code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    if model_name == "unixcoder-base":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length - 4]
+        code_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + code_tokens
+            + [tokenizer.sep_token]
+        )
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codebert-base":
+        code_tokens = tokenizer.tokenize(code)[:args.code_length-2]
+        code_tokens = [tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
+        code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    elif model_name == "codet5p-110m-embedding":
+        code_tokens = tokenizer.tokenize(code)[: args.code_length]
+        code_ids = tokenizer.encode(code)[: args.code_length]
     padding_length = args.code_length - len(code_ids)
     code_ids += [tokenizer.pad_token_id]*padding_length
-    
+
     nl = ' '.join(js['docstring_tokens']) if type(js['docstring_tokens']) is list else ' '.join(js['doc'].split())
-    nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-4]
-    nl_tokens = [tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+nl_tokens+[tokenizer.sep_token]
-    nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
-    padding_length = args.nl_length - len(nl_ids)
-    nl_ids += [tokenizer.pad_token_id]*padding_length    
-    
+    if model_name == "unixcoder-base":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
+        nl_tokens = (
+            [tokenizer.cls_token, "<encoder-only>", tokenizer.sep_token]
+            + nl_tokens
+            + [tokenizer.sep_token]
+        )
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codebert-base":
+        nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-2]
+        nl_tokens = [tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
+        nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+    elif model_name == "codet5p-110m-embedding":
+        nl_tokens = tokenizer.tokenize(nl)[: args.nl_length]
+        nl_ids = tokenizer.encode(nl)[: args.nl_length]
+        padding_length = args.nl_length - len(nl_ids)
+        nl_ids += [tokenizer.pad_token_id]*padding_length
+        
     return InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['url'] if "url" in js else js["retrieval_idx"])
+           
+
+# def convert_examples_to_features(js,tokenizer,args):
+#     """convert examples to token ids"""
+    # code = js['code']
+    # # code = ' '.join(js['code_tokens']) if type(js['code_tokens']) is list else ' '.join(js['code_tokens'].split())
+    # code_tokens=tokenizer.tokenize(code)[:args.code_length-2]
+    # code_tokens =[tokenizer.cls_token]+code_tokens+[tokenizer.sep_token]
+    # code_ids =  tokenizer.convert_tokens_to_ids(code_tokens)
+    # padding_length = args.code_length - len(code_ids)
+    # code_ids+=[tokenizer.pad_token_id]*padding_length
+    
+    # nl = js['doc']
+    # # nl = ' '.join(js['docstring_tokens']) if type(js['docstring_tokens']) is list else ' '.join(js['doc'].split())
+    # nl_tokens=tokenizer.tokenize(nl)[:args.nl_length-2]
+    # nl_tokens =[tokenizer.cls_token]+nl_tokens+[tokenizer.sep_token]
+    # nl_ids =  tokenizer.convert_tokens_to_ids(nl_tokens)
+    # padding_length = args.nl_length - len(nl_ids)
+    # nl_ids+=[tokenizer.pad_token_id]*padding_length   
+    # """convert examples to token ids"""
+    # code = ' '.join(js['code_tokens']) if type(js['code_tokens']) is list else ' '.join(js['code_tokens'].split())
+    # code_tokens = tokenizer.tokenize(code)[:args.code_length-4]
+    # code_tokens =[tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+code_tokens+[tokenizer.sep_token]
+    # code_ids = tokenizer.convert_tokens_to_ids(code_tokens)
+    # padding_length = args.code_length - len(code_ids)
+    # code_ids += [tokenizer.pad_token_id]*padding_length
+    
+    # nl = ' '.join(js['docstring_tokens']) if type(js['docstring_tokens']) is list else ' '.join(js['doc'].split())
+    # nl_tokens = tokenizer.tokenize(nl)[:args.nl_length-4]
+    # nl_tokens = [tokenizer.cls_token,"<encoder-only>",tokenizer.sep_token]+nl_tokens+[tokenizer.sep_token]
+    # nl_ids = tokenizer.convert_tokens_to_ids(nl_tokens)
+    # padding_length = args.nl_length - len(nl_ids)
+    # nl_ids += [tokenizer.pad_token_id]*padding_length     
+    
+    # return InputFeatures(code_tokens,code_ids,nl_tokens,nl_ids,js['url'] if "url" in js else js["retrieval_idx"])
 
 class TextDataset(Dataset):
     def __init__(self, tokenizer, args, file_path=None):
@@ -146,7 +213,7 @@ def train(args, model, tokenizer):
     
     # model.resize_token_embeddings(len(tokenizer))
     model.zero_grad()
-    
+    model_name = args.model_name_or_path.split('/')[-1]
     model.train()
     tr_num,tr_loss,best_mrr = 0,0,0 
     for idx in range(args.num_train_epochs): 
@@ -155,9 +222,18 @@ def train(args, model, tokenizer):
             code_inputs = batch[0].to(args.device)    
             nl_inputs = batch[1].to(args.device)
             #get code and nl vectors
-            code_vec = model(code_inputs=code_inputs)
-            nl_vec = model(nl_inputs=nl_inputs)
-            
+            # code_vec = model(code_inputs=code_inputs)
+            # nl_vec = model(nl_inputs=nl_inputs)
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                code_vec = model(code_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                code_vec = model(code_inputs)[0]
+                
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                nl_vec = model(nl_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                nl_vec = model(nl_inputs)[0]
+                
             #calculate scores and loss
             scores = torch.einsum("ab,cb->ac",nl_vec,code_vec)
             loss_fct = CrossEntropyLoss()
@@ -199,6 +275,46 @@ def train(args, model, tokenizer):
             torch.save(model_to_save.state_dict(), output_dir)
             logger.info("Saving model checkpoint to %s", output_dir)
 
+# sort_lists是按relevance降序排列的code_idxs
+def CalculateMRR(sort_lists,eval_file,query_idxs):
+    print(f'calculating MRR--------------')
+    with open(eval_file,'r') as f:
+        data = json.load(f)
+    ranks = []
+    inverse_ranks = []
+    for idx,item in tqdm(zip(query_idxs, sort_lists)):
+        # 找出给定query-idx的正确代码的code-idx的first one
+        code_idxs = [item['code-idx'] for item in data if item['query-idx'] == idx] 
+        # print(f'code_idxs:{code_idxs}')
+        rank_i = []
+        for code_idx in code_idxs:
+            try:
+                # 1000以后的置0
+                rank = item.index(code_idx)+1
+                if rank <= 1000:
+                    rank_i.append(rank)
+                else:
+                    rank_i.append(0) 
+            except ValueError:
+                rank_i.append(0)
+        # print(f'rank_i:{rank_i}')       
+        # 只有0返回0，有0有正返回最小正整数
+        rank_x = [num for num in rank_i if num > 0]
+        rank_min = 0
+        if rank_x:
+            rank_min = min(rank_x)
+        ranks.append(rank_min)
+        # print(f'ranks:{ranks}')
+    for rank in ranks:
+        if not rank == 0:
+            inverse_ranks.append(1/rank)
+        else:
+            inverse_ranks.append(0)
+    MRR = sum(inverse_ranks) / len(inverse_ranks)
+    print(f'eval_mrr:{MRR}')
+    return MRR
+  
+
 
 def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     query_dataset = TextDataset(tokenizer, args, file_name)
@@ -220,16 +336,23 @@ def evaluate(args, model, tokenizer,file_name,eval_when_training=False):
     model.eval()
     code_vecs = [] 
     nl_vecs = []
+    model_name = args.model_name_or_path.split('/')[-1]
     for batch in query_dataloader:  
         nl_inputs = batch[1].to(args.device)
         with torch.no_grad():
-            nl_vec = model(nl_inputs=nl_inputs) 
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                nl_vec = model(nl_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                nl_vec = model(nl_inputs)[0]
             nl_vecs.append(nl_vec.cpu().numpy()) 
 
     for batch in code_dataloader:
         code_inputs = batch[0].to(args.device)    
         with torch.no_grad():
-            code_vec = model(code_inputs=code_inputs)
+            if model_name == 'unixcoder-base' or 'codebert-base':
+                code_vec = model(code_inputs)
+            elif model_name == 'codet5p-110m-embedding':
+                code_vec = model(code_inputs)[0]
             code_vecs.append(code_vec.cpu().numpy())  
     model.train()    
     code_vecs = np.concatenate(code_vecs,0)
@@ -336,12 +459,19 @@ def main():
     set_seed(args.seed)
 
     #build model
-    tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path)
-    config = RobertaConfig.from_pretrained(args.model_name_or_path)
-    model = RobertaModel.from_pretrained(args.model_name_or_path) 
+    # tokenizer = RobertaTokenizer.from_pretrained(args.model_name_or_path)
+    # config = RobertaConfig.from_pretrained(args.model_name_or_path)
+    # model = RobertaModel.from_pretrained(args.model_name_or_path) 
  
     
-    model = Model(model)
+    # model = Model(model)
+    tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path,trust_remote_code=True)
+    model = AutoModel.from_pretrained(args.model_name_or_path,trust_remote_code=True)
+    model_name = args.model_name_or_path.split('/')[-1]
+    if model_name == 'unixcoder-base':
+        model = UniXcoderModel(model)
+    elif model_name == 'codebert-base':
+        model = CodeBertModel(model)
     logger.info("Training/evaluation parameters %s", args)
     
     model.to(args.device)
@@ -381,5 +511,4 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
