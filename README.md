@@ -1,8 +1,8 @@
 # CoSQA-plus
 
-This repository contains codes and datasets for the paper ["CoSQA+: Enhancing Code Search Dataset with Matching Code"](https://arxiv.org/abs/2406.11589)
+This repository contains code and datasets for the paper ["CoSQA+: Enhancing Code Search Dataset with Matching Code"](https://arxiv.org/abs/2406.11589)
 
-Our primary work can be divided into three parts: constructing CoSQA+([CoSQA+ Construction](#cosqa-construction)), testing large models for question answering, and testing code search models and methods([Test on CoSQA+](#test-on-cosqa)). This code repository will provide the corresponding code for these three sections as well as the data required to reproduce the results.
+Our work can be divided into three parts: constructing CoSQA+([CoSQA+ Construction](#cosqa-construction)), testing LLMs for question answering, and testing code search models and methods([Test on CoSQA+](#test-on-cosqa)). We will provide the corresponding code for these sections and the data required to reproduce the results.
 
 The construction of CoSQA+ can be broken down into three steps. The first step is data collection and processing. The second involves matching queries with code to form 100K pairs, and using Claude 3 Sonnet to judge whether the code matches the query. The third step is generating code for queries that were not successfully matched with code.
 
