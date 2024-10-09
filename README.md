@@ -61,7 +61,7 @@ krippendorff==0.6.1
 
 ### Datasets
 
-The datasets are currently available for viewing at the [Google Drive](https://drive.google.com/drive/folders/1yoIoNfVI4vN5dk3VLuvGGorOE4fOleDT?usp=sharing)
+The datasets are currently available for viewing at [Google Drive](https://drive.google.com/drive/folders/1yoIoNfVI4vN5dk3VLuvGGorOE4fOleDT?usp=sharing)
 
 | Filename                                       | Content                                                           |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
