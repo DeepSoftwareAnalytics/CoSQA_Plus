@@ -29,7 +29,7 @@ In the experiments, it is not necessary to pre-train the large models - only fin
 
 Additionally, it's worth noting that the dataset construction process involves large-scale matrix operations (for computing similarity). To avoid excessive memory usage, we also optimized the batch processing during dataset construction - the batch size can be adjusted based on the available memory. The model test program does not have this batch optimization for matrix operations, so running the tests will consume **around 14GB of memory**.
 
-## Our Experiment Environment
+## Experiment Environment
 
 Hardware:
 
@@ -61,9 +61,7 @@ krippendorff==0.6.1
 
 ### Datasets
 
-The datasets are currently available for viewing at the following Google Drive link:
-
-https://drive.google.com/drive/folders/1yoIoNfVI4vN5dk3VLuvGGorOE4fOleDT?usp=sharing
+The datasets are currently available for viewing at the [Google Drive](https://drive.google.com/drive/folders/1yoIoNfVI4vN5dk3VLuvGGorOE4fOleDT?usp=sharing)
 
 | Filename                                       | Content                                                           |
 | ---------------------------------------------- | ----------------------------------------------------------------- |
