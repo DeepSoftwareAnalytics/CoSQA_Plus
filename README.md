@@ -12,7 +12,10 @@ Testing large models for question answering primarily focuses on evaluating the 
 
 **Performance of CoSQA+**:
 
-<img src="image/README/cosqa+performance.png" alt="1727367035492" style="zoom:15%;width:50%;display: block;margin: auto" />
+<div style="text-align: center;">
+  <img src="image/README/cosqa+performance.png" alt="1727367035492" style="zoom: 15%; width: 50%;" />
+</div>
+
 
 **If you just want to use CoSQA+ dataset itself, goto [Train on CoSQA+](#train-on-cosqa) and [Test on CoSQA+](#test-on-cosqa) directly.**
 
