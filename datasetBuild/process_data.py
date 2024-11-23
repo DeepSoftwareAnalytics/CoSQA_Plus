@@ -276,6 +276,11 @@ def pairs_transform():
 
 
 def divide_query_by_label(pairs_csv_file):
+    """
+    separates the queries into two sets based on the label:
+    yes_label_query : query with matched code
+    no_label_query : query without matched code
+    """
     pairs_data = pd.read_csv(pairs_csv_file)
     yes_label_query_data = pairs_data[pairs_data["judgement"] == "yes"]
     yes_label_query = []
