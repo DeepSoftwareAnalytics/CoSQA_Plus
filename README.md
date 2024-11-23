@@ -171,65 +171,9 @@ csproject/
 Note that **fully reproducing this part requires significant resources**, especially since annotating with large models incurs high costs.
 
 The overall pipeline is shown in the following graph:
-
-```mermaid
-graph TD
-    subgraph Query&Code Collection
-    	A0
-    	A00
-    	A1
-    	A10
-    end
-    subgraph Candidate Pairs Construction
-    	B1
-    	B2
-    	C
-    	D1
-    	D2
-    	E
-    end
-    subgraph Model Annotation
-        E
-        F1
-        F2
-        F3
-        G
-    end
-    subgraph Missing Code Generation
-    	I
-    	J
-    end
-	A0[(CoSQA)] -->A00
-	A1[(CSN,StaQC)] -->A10
-    A00(CSN-StaQC-code.json) -->|select_code.py get_embedding| B1(code_vecs.pkl)
-    A10[query.json] -->|select_code.py get_embedding|B2(nl_vecs.pkl)
-  
-    B1 --> C([select_code.py select_code])
-    B2 --> C
-    C -->D1(selected_code.json)
-    C -->D2(selected_code.pickle)
-
-    D1 -->|process_data.py from_top5_to_individual| E(query_code_pairs.json)
-
-    E -->|dataset_label.py| F1(dataset_annotation_claude3sonnet.csv)
-    F1 -->|process_data.py judgement_extraction| F2(dataset_annotation_claude3sonnet_processed.csv)
-    F2 -->|process_data.py judgement_extraction1| F3(dataset_annotation_claude3sonnet_processed1.csv)
-
-    F3 -->|process_data.py pairs_transform| G(query_code_pairs_label.json)
-
-    G -->G1([process_data.py build_dataset_from_pairs]) 
-    G1 -->H1(final_codebase.json)
-    G1 -->H2(final_query_code_pairs.json)
-
-    G -->|process_data.py divide_query_by_label| I(query_without_mathced_code.json)
-
-    I -->|code_augment.py| J(GPT4o_augment_query_code_pairs.csv)
-
-    J -->|utils.py csv_to_json| K([process_data.py build_augment_dataset])
-    H1 --> K
-    H2 --> K
-    K --> L[(CoSQA+)]
-```
+<div align="center">
+  <img src="image/README/construction_flowgraph.png" alt="construction_flowgraph" width="50%"/>
+</div>
 
 ### Query&Code Collection
 
