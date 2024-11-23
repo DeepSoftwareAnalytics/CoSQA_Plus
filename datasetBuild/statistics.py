@@ -1,10 +1,16 @@
+# statistics.py
+# Description: functions to calculate statistics about CoSQA+.
 import json
 import pandas as pd
-from process_data import get_claude_code
+from process_data import CSN_STAQC_CODE_FILE, divide_query_by_label, get_claude_code
 from collections import Counter
-def query_statistic():
-    files = ["CoSQA-plus/dataset/query.json","CoSQA-plus/dataset/cosqa-all.json"]
-    with open(files[1],"r") as f:
+from tabulate import tabulate
+def query_statistic(query_file):
+    """
+    The function `query_statistic` calculates 
+    the total number and the average length of the queries.
+    """
+    with open(query_file,"r", encoding="utf-8") as f:
         query_json = json.load(f)
         
     query_num = len(query_json)
@@ -14,24 +20,36 @@ def query_statistic():
         
     print(f'query_num: {query_num}')
     print(f'query_avg_length: {query_length/query_num}')
-def pairs_statistic():
-    pairs_data = pd.read_csv("CoSQA-plus/dataset/stage_2_final/dataset_annotation_claude3sonnet_processed.csv")
-    # 统计没有label为yes代码的query
-    yes_label_query_data = pairs_data[pairs_data['judgement'] == "yes"]
-    yes_label_query = []
-    for idx,row in yes_label_query_data.iterrows():
-        yes_label_query.append(row['query-index'])
-    yes_label_query = set(yes_label_query)
-    no_label_query = []
-    for idx,row in pairs_data.iterrows():
-        if row['query-index'] not in yes_label_query:
-            no_label_query.append(row['query-index'])
-    no_label_query = set(no_label_query)
-    # get_claude_code(no_label_query)
-    print(f"yes label query num:{len(yes_label_query)}")
-    print(f"yes label query ratio:{len(yes_label_query)/len(pairs_data)}")
-    print(f"no label query num:{len(no_label_query)}")
-    print(f"no label query ratio:{len(no_label_query)/len(pairs_data)}")
+    
+def code_statistic(codebase_file):
+    '''
+    The function `code_statistic` calculates 
+    the total number and the average length of the code snippets.
+    '''
+    with open(codebase_file,"r", encoding="utf-8") as f:
+        codebase_json = json.load(f)
+    code_num = len(codebase_json)
+    code_length = 0
+    for item in codebase_json:
+        code_length += len(item['code'])
+    print(f'code_num: {code_num}')
+    print(f'code_avg_length: {code_length/code_num}')
+    
+
+    
+def pairs_label_statistic(pairs_csv_file):
+    '''
+    The function `pairs_statistic` calculates 
+    the number of queries with and without code labels.
+    '''
+    yes_label_query,no_label_query = divide_query_by_label(pairs_csv_file)
+    len_yes_query, len_no_query = yes_label_query, no_label_query
+    len_total_query = len_yes_query + len_no_query
+    print(f"total pairs num:{len_total_query}")
+    print(f"yes label query num:{len_yes_query}")
+    print(f"yes label query ratio:{len_yes_query/len_total_query}")
+    print(f"no label query num:{len_no_query}")
+    print(f"no label query ratio:{len_no_query/len_total_query}")
 
 def count_and_print_stats(data, source_name):
     total_num = 0
@@ -62,15 +80,15 @@ def count_and_print_stats(data, source_name):
         print(f'{source_name}_code length<={length}: {count}')
 
 def selected_code_statistic():
-    with open("CoSQA-plus/dataset/stage_3_augment/final_augment_codebase_label1.json","r") as f:
+    with open("CoSQA-plus/dataset/stage_3_augment/final_augment_codebase_label1.json","r", encoding="utf-8") as f:
         augment_codebase_json = json.load(f)
     length = 0
     for item in augment_codebase_json:
         length += len(item['code'])
     print(f"avg_length: {length/len(augment_codebase_json)}")
         
-def code_statistic():
-    with open("CoSQA-plus/dataset/CSN-StaQC-code.json", "r") as f:
+def code_len_statistic():
+    with open("CoSQA-plus/dataset/CSN-StaQC-code.json", "r", encoding="utf-8") as f:
         data = json.load(f)
     
     sources = {'CSN': [], 'StaQC': []}
@@ -87,14 +105,91 @@ def code_statistic():
     print(f'Total unique codes: {len(code_counter)}')
     print(f'Top 10 codes: {code_counter.most_common(10)}')
 
-def augment_statistic(codebase_file,pairs_file):
-    with open(codebase_file,"r") as f:
-        augment_codebase_json = json.load(f)
-    with open(pairs_file,"r") as f:
-        augment_query_code_pairs = json.load(f)
-    # 统计
-    print(f"augment_codebase code num: {len(augment_codebase_json)}")
-    print(f"augment_query_code_pairs num: {len(augment_query_code_pairs)}")
+def select_code_statistic():
+    # 统计检查
+        with open("CoSQA-plus/dataset/selected_code3.json", "r", encoding="utf-8") as f:
+            data = json.load(f)
+        with open(CSN_STAQC_CODE_FILE,"r", encoding="utf-8") as f:
+            code_data = json.load(f)
+        count_20 = 0
+        count_50 = 0
+        count_2000 = 0
+        count_5000 = 0
+        code_counter = Counter()
+        code_content_counter = Counter()
+        for item in data:
+            for i in range(1,6):
+                if len(item[f'top{i}_code']) > 2000:
+                    count_2000 += 1
+                    # print(item['query'],":  ",item[f'top{i}_code'])
+                    if len(item[f'top{i}_code']) > 5000:
+                        count_5000 += 1
+                if len(item[f'top{i}_code'])<50:
+                    count_50 += 1
+                    if(item[f'top{i}_code'] == "from __future__ import print_function"):
+                        print(item['query'],":  ",item[f'top{i}_code'])
+                    code_content_counter.update([item[f'top{i}_code'].strip()])
+                    # print(item['query'],":  ",item[f'top{i}_code'])
+                    if len(item[f'top{i}_code'])<20:
+                        count_20 += 1
+            code_index_list = item['top_code_index'][1:-1].strip().split(',')
+            code_counter.update(code_index_list)
+        # 统计重复出现的长度小于50的代码
+        test_data = code_content_counter.most_common(10)
+        print("Most Common Codes <50:")
+        print(tabulate(test_data, headers=["Code", "Occurrence"], tablefmt="grid"))
+        # 统计重复出现的代码
+        table_data = code_counter.most_common(10)
+        enriched_table_data = [
+            (idx, count, code_data[int(idx)]['code'])  # 使用 get 防止 KeyError，若无对应片段则显示"N/A"
+            for idx, count in table_data
+        ]
+        headers = ["Code Index", "Occurrence","Code Snippet"]
+        print("Most Common Codes:")
+        print(tabulate(enriched_table_data, headers=headers, tablefmt="grid"))
+        
+        # 统计来自CSN和StaQC的代码数量
+        CSN_code_num = 0
+        StaQC_code_num = 0
+        code_length = 0 
+        max_code_length = 0
+        min_code_length = 5000
+        for k,v in code_counter.items():
+            k = int(k)
+            code_length += len(code_data[k]['code'])
+            if len(code_data[k]['code']) > max_code_length:
+                max_code_length = len(code_data[k]['code'])
+            if len(code_data[k]['code']) < min_code_length:
+                min_code_length = len(code_data[k]['code'])
+            if code_data[k]['source'] == 'CSN':
+                CSN_code_num += 1
+            elif code_data[k]['source'] == 'StaQC':
+                StaQC_code_num += 1
+        print("quert/item num:", len(data))
+        print("total code num:",len(code_counter))
+        print("CSN code num:",CSN_code_num)
+        print("StaQC code num:",StaQC_code_num)
+        print("Avg code length:",code_length/len(code_counter))
+        print("Max code length:",max_code_length)
+        print("Min code length:",min_code_length)
+        # 注意下面输出的不同长度代码片段的统计是没有去重的
+        print("code length > 2000:", count_2000)
+        print("code length > 5000:", count_5000)
+        print("code length < 20:", count_20)
+        print("code length < 50:", count_50)
+
+
+
+# file path
+QUERY_FILE = "CoSQA-plus/dataset/query.json"
+CODEBASE_FILE = "CoSQA-plus/dataset/codebase.json"
+def main():
+    query_statistic(QUERY_FILE)
+    code_statistic(CODEBASE_FILE)
+
+if __name__ == "__main__":
+    main()
+
 # pairs_statistic()
 # selected_code_statistic()
 # augment_statistic("CoSQA-plus/dataset/stage_3_augment/final_augment_codebase.json","CoSQA-plus/dataset/stage_3_augment/final_augment_query_code_pairs_for_search.json")
