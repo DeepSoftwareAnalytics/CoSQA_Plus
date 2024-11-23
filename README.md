@@ -1,10 +1,15 @@
 # CoSQA-plus
 
-This repository contains code and datasets for the paper ["CoSQA+: Enhancing Code Search Dataset with Matching Code"](https://arxiv.org/abs/2406.11589)
+This repository contains code and datasets for the paper [&#34;CoSQA+: Enhancing Code Search Dataset with Matching Code&#34;](https://arxiv.org/abs/2406.11589)
 
 Our work can be divided into three parts: constructing CoSQA+([CoSQA+ Construction](#cosqa-construction)), testing LLMs for question answering, and testing code search models and methods([Test on CoSQA+](#test-on-cosqa)). We will provide the corresponding code for these sections and the data required to reproduce the results.
 
-The construction of CoSQA+ can be broken down into three steps. The first step is data collection and processing. The second involves matching queries with code to form 100K pairs, and using Claude 3 Sonnet to judge whether the code matches the query. The third step is generating code for queries that were not successfully matched with code.
+The construction of CoSQA+ can be broken down into four steps as mentioned in the paper：
+
+1. **Query&Code Collection**.
+2. **Candidate Pairs Construction**.
+3. **Model Annotatoin**.
+4. **Missing Code Generation**.
 
 Testing code search models and methods requires downloading and configuring various code search models and methods to perform code search tests, calculating MRR and MMRR.
 
@@ -16,8 +21,9 @@ Testing large models for question answering primarily focuses on evaluating the 
   <img src="image/README/cosqa+performance.png" alt="1727367035492" width="50%"/>
 </div>
 
-
 **If you just want to use CoSQA+ dataset itself, go to [Train on CoSQA+](#train-on-cosqa) and [Test on CoSQA+](#test-on-cosqa) directly.**
+
+This project is licensed under the Apache2.0 License.
 
 ## Model Size & Budget
 
@@ -164,9 +170,12 @@ csproject/
 
 Note that **fully reproducing this part requires significant resources**, especially since annotating with large models incurs high costs. Therefore, we mainly provide guidelines for reproducing query-to-code matching using a multi-model approach.
 
-### Download Code Datasets
+### Query&Code Collection
 
-**The quickest way** is to download our curated datasets (Google Drive):
+1. collect code
+2. collect queries
+
+You can directly download our curated datasets (Google Drive) and jump to [Candidate Pairs Construction](#candidate-pairs-construction):
 
 Filtered and merged StaQC Python code `StaQC-code.json`:
 
@@ -176,7 +185,11 @@ Filtered StaQC Python code and CodeSearchNet Python code merged dataset `CSN-Sta
 
 https://drive.google.com/file/d/15n8H3WzfjC0MejXvwU2o7seRI0tjQ1wk/view?usp=drive_link
 
+#### Collect Code
+
 If you want to reconstruct the codebase, you can follow the instructions below:
+
+**Download CSN and StaQC** :
 
 We need `python_dedupe_definitions_v2.pkl` from CodeSearchNet's python.zip and two pkl files from StaQC: `python_how_to_do_it_by_classifier_multiple_iid_to_code.pickle` and `python_how_to_do_it_qid_by_classifier_unlabeled_single_code_answer_qid_to_code.pickle`.
 
@@ -190,6 +203,8 @@ Alternatively, you can download them via Hugging Face:
 
 [koutch/staqc · Datasets at Hugging Face](https://huggingface.co/datasets/koutch/staqc)
 
+**Code cleaning** :
+
 For StaQC, preliminary filtering is needed:
 
 ```python
@@ -198,17 +213,19 @@ python datasetBuild/StaQC_data_to_json.py
 
 Note that the parameter for the function `check_pickle_file("python_how_to_do_it_by_classifier_multiple_iid_to_code.pickle")` should be changed to the directory where you stored the StaQC Python code pkl files. Then, merge the two JSON files.
 
-Finally, merge the CSN Python code with the StaQC Python code. This can be done by calling `process_CSN()` and `merge_CSN_and_StaQC()` in `datasetBuild/process_data.py`.
+**Merge CSN and StaQC** :
 
-### Download Query Dataset
+Finally, merge the CSN Python code with the StaQC Python code. This can be done by calling `process_CSN()` and `merge_CSN_and_StaQC()` in `datasetBuild/data_collection.py`.
+
+#### Collect Query
 
 [CoCLR/data/qa/cosqa-all.json at main · Jun-jie-Huang/CoCLR (github.com)](https://github.com/Jun-jie-Huang/CoCLR/blob/main/data/qa/cosqa-all.json)
 
 Place the downloaded `cosqa-all.json` in the `dataset` folder from original CoSQA.
 
-Call `process_query()` in `datasetBuild/process_data.py` to complete the processing and obtain `query.json`.
+Call `process_query()` in `datasetBuild/data_collection.py` to complete the processing and obtain `query.json`.
 
-### Match Code for Queries
+### Candidate Pairs Construction
 
 The main task of matching code to queries is done by `datasetBuild/select_code.py`.
 
@@ -267,7 +284,7 @@ python CoSQA-plus/select_code.py --model_name_or_path unixcoder-base codet5p-110
 --code_length 256 --nl_length 128 --eval_batch_size 640 --seed 123456
 ```
 
-This code will read the 6 files in `embedding`(mentioned [above](#1-embed-querycode)) and calculate the similarity between query vectors and code vectors. Notbly, the memory usage of this step is extremely high. The similarity matrix will be computed in batches and **you may need to adjust the variable `batch_size` in `def select_code(args)` function to fit you computer**. The `batch_size` should be a factor of num of queries (that is 20604).
+This code will read the 6 files in `embedding`(mentioned [above](#1-embed-querycode)) and calculate the similarity between query vectors and code vectors. Notbly, the **memory usage of this step is extremely high**. The similarity matrix will be computed in batches and **you may need to adjust the variable `batch_size` in `def select_code(args)` function to fit you computer**. The `batch_size` should be a factor of num of queries (that is 20604).
 
 When it comes to success of this step,  there will be 2 files, `selected_code.json` and `selected_code.pickle` , which contain 5 selected code for each query.
 
@@ -288,11 +305,9 @@ When it comes to success of this step,  there will be 2 files, `selected_code.js
 ]
 ```
 
-### Annotation and Code Generation
-
 Before leveraging LLM for annotaion, the transform of `selected_code.json` is needed. Use the `from_top5_to_individual` function of `process_data.py` to make query-code pairs.
 
-The results are to be saved in `query_code_pairs.json` and the content looks like:
+The candidate pairs are to be saved in `query_code_pairs.json` and the content looks like:
 
 ```json
 [
@@ -314,23 +329,26 @@ The results are to be saved in `query_code_pairs.json` and the content looks lik
 ]
 ```
 
-Then, use `dataset_label.py`(relies on `askLLM.py`) for annotaton. You need to modify the code to run it well :
+### Model Annotation
+
+Use `dataset_label.py`(relies on `askLLM.py`) for annotaton. You need to modify the code to run it well :
 
 1. For `askLLM.py` , modify the path to read your `apikey.txt` or you can just directly wirte you api key in code. Furthermore, you need to setup the model and other setting options.
 2. For `dataset_label.py`
-   1. modify `input_file` and `output_file` to set the path of input file (`query_code_pairs.json`) and output_file (such as `dataset_annotation_claude3sonnet.json`).
+   1. modify `input_file` and `output_file` to set the path of input file (`query_code_pairs.csv`) and output_file (such as `dataset_annotation_claude3sonnet.csv`).
    2. modify `max_concurrent_tasks` to adjust the num of threads for request LLM api.
    3. modify the file path in `def get_prompt(query,code)` function to set the prompt.
 
-After that, we get answers from LLM (`f `) which need to be extracted the final judgement. Use `def judgement_extraction(input_file, processed_file)` function to do that :
+After that, we get answers from LLM (`f `) which need to be extracted the final judgement. Use `def judgement_extraction(input_file, processed_file)` and `judgement_extraction1(input_file1,processed_file1)`function to do that :
 
 ```python
-judgement_extraction("dataset_annotation_claude3sonnet.json","final_query_code_pairs.json")
+judgement_extraction("dataset_annotation_claude3sonnet.csv","dataset_annotation_claude3sonnet_processed.csv")
+judgement_extraction1("dataset_annotation_claude3sonnet_processed.csv","dataset_annotation_claude3sonnet_processed1.csv")
 ```
 
 In fact, this is just the ideal situation because the LLM may generate wrong answers which deviate the prompt. So you may wash the data by hand and try to generate missing answers of specific pairs for several times.  The following functions in `process_data.py` may help:`def remove_no_answer_row(input_file, processed_file)`,`def remove_empty_row(input_file, processed_file)`,`def drop_n_pair_index(input_file,processed_file,pair_index)`,`def change_to_no(input_file,processed_file,pair_index)`
 
-Finally, we will get annotation results in `final_query_code_pairs.json`，which looks like：
+We will get annotation results in `dataset_annotation_claude3sonnet_processed1.csv` , then use `pairs_transform()` in process_data.py to comform the format. The result `query_code_pairs_label.json` looks like：
 
 ```python
     {
@@ -345,7 +363,17 @@ Finally, we will get annotation results in `final_query_code_pairs.json`，which
 ]
 ```
 
-Finish primary annotation, the next step is find out queries without matched code.
+Additionally, we can build codebase and pairs based on this codebase by `build_codebase()` in `process_data.py  `
+
+Finish primary annotation, the next step is find out queries without matched code, use ` divide_query_by_label(pairs_csv_file)` in `process_data.py` to get  `query_without_mathced_code.json`
+
+### Missing Code Generation
+
+Use `code_augment.py` for code generation and get pairs with generated code : GPT4o_augment_query_code_pairs.csv .
+
+The usage is similar to `data_label.py` mentioned before.
+
+In the end, use `build_augment_dataset()` in process_data.py to get CoSQA+ dataset.🎉
 
 ## Test LLMs for Annotation
 
