@@ -43,7 +43,7 @@ class CodeInputFeatures(object):
 
 def convert_query_examples_to_features(js, tokenizer, args, model_name):
     """convert examples to token ids"""
-    nl = (" ".join(js["doc"].split()))
+    nl = (" ".join(js["query"].split()))
     if model_name == "unixcoder-base":
         nl_tokens = tokenizer.tokenize(nl)[: args.nl_length - 4]
         nl_tokens = (
@@ -65,7 +65,7 @@ def convert_query_examples_to_features(js, tokenizer, args, model_name):
         nl_ids = tokenizer.encode(nl)[: args.nl_length]
         padding_length = args.nl_length - len(nl_ids)
         nl_ids += [tokenizer.pad_token_id]*padding_length
-    return QueryInputFeatures(js["idx"], nl_tokens, nl_ids)
+    return QueryInputFeatures(js["query-idx"], nl_tokens, nl_ids)
 
 
 def convert_code_examples_to_features(js, tokenizer, args, model_name):
